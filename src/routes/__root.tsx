@@ -13,7 +13,9 @@ import type { ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { Toaster } from "@/components/ui/sonner";
 import { AppShell } from "@/components/acs/AppShell";
+import { LoginScreen } from "@/components/auth/LoginScreen";
 import { AcsStoreProvider } from "@/lib/acs-store";
+import { AuthProvider, useAuth } from "@/lib/auth";
 
 function NotFoundComponent() {
   return (
@@ -122,18 +124,43 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+export function AuthGate({ children }: { children: ReactNode }) {
+  const { status } = useAuth();
+
+  if (status === "loading") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <div className="acs-card flex items-center gap-3 px-5 py-4 text-sm font-medium text-foreground">
+          <span className="size-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <span>Verifying admin session...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "unauthenticated") {
+    return <LoginScreen />;
+  }
+
+  return <>{children}</>;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AcsStoreProvider>
-        <AppShell>
-          {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-          <Outlet />
-        </AppShell>
+      <AuthProvider>
+        <AuthGate>
+          <AcsStoreProvider>
+            <AppShell>
+              {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+              <Outlet />
+            </AppShell>
+          </AcsStoreProvider>
+        </AuthGate>
         <Toaster position="top-right" />
-      </AcsStoreProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

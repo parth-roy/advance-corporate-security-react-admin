@@ -50,6 +50,7 @@ import {
 } from "@/components/ui/sidebar";
 import { AcsLogo } from "@/components/acs/AcsLogo";
 import { useAcsStore } from "@/lib/acs-store";
+import { useAuth } from "@/lib/auth";
 
 type AppRoutePath =
   | "/"
@@ -173,6 +174,7 @@ function AcsSidebar({ onLogoutClick }: { onLogoutClick: () => void }) {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { data } = useAcsStore();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [query, setQuery] = useState("");
@@ -180,7 +182,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [logoutOpen, setLogoutOpen] = useState(false);
 
   const current = ALL_ROUTES.find((r) => r.to === pathname) ?? ALL_ROUTES[0]!;
-  const initials = data.settings.adminName
+  const displayName = user?.name || data.settings.adminName;
+  const displaySub = user?.email || data.settings.adminRole;
+  const initials = displayName
     .split(" ")
     .map((p) => p[0])
     .join("")
@@ -296,8 +300,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <AvatarFallback className="bg-primary text-xs font-semibold text-primary-foreground">{initials}</AvatarFallback>
                 </Avatar>
                 <div className="hidden text-left leading-tight sm:block">
-                  <p className="text-xs font-semibold text-foreground">{data.settings.adminName}</p>
-                  <p className="text-[11px] text-muted-foreground">{data.settings.adminRole}</p>
+                  <p className="text-xs font-semibold text-foreground">{displayName}</p>
+                  <p className="text-[11px] text-muted-foreground">{displaySub}</p>
                 </div>
               </Link>
             </div>
@@ -313,11 +317,17 @@ export function AppShell({ children }: { children: ReactNode }) {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Sign out of ACS Admin Panel?</AlertDialogTitle>
-            <AlertDialogDescription>This UI prototype runs without authentication. Confirming simulates ending the current admin session.</AlertDialogDescription>
+            <AlertDialogDescription>You will be signed out of your active administrator session and returned to the login screen.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { toast.info("Session signed out (prototype simulation)."); setLogoutOpen(false); }}>
+            <AlertDialogAction
+              onClick={async () => {
+                setLogoutOpen(false);
+                await logout();
+                toast.success("Signed out successfully.");
+              }}
+            >
               Sign Out
             </AlertDialogAction>
           </AlertDialogFooter>

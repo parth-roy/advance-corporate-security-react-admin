@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Building2, Mail, Save, SlidersHorizontal, Upload, User } from "lucide-react";
+import { Building2, KeyRound, Mail, Save, ShieldCheck, SlidersHorizontal, Upload, User, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import { AcsLogo } from "@/components/acs/AcsLogo";
 import { cn } from "@/lib/utils";
 import { PAYROLL_MONTHS } from "@/lib/acs-seed";
 import { useAcsStore } from "@/lib/acs-store";
+import { type AdminAuthUser, type AdminUserRole, useAuth } from "@/lib/auth";
 import { isValidEmail } from "@/lib/acs-utils";
 
 function ToggleSwitch({
@@ -61,9 +62,101 @@ export const Route = createFileRoute("/settings")({
 
 function SettingsPage() {
   const { data, updateSettings } = useAcsStore();
+  const { user, changePassword, apiRequest } = useAuth();
   const [form, setForm] = useState(data.settings);
   const [logoFile, setLogoFile] = useState("");
   const [error, setError] = useState("");
+
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [pwSaving, setPwSaving] = useState(false);
+
+  const canManageUsers = user?.role === "super_admin" || user?.role === "admin";
+  const [adminUsers, setAdminUsers] = useState<AdminAuthUser[]>([]);
+  const [newUserName, setNewUserName] = useState("");
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("");
+  const [newUserRole, setNewUserRole] = useState<AdminUserRole>("admin");
+  const [creatingUser, setCreatingUser] = useState(false);
+
+  const loadAdminUsers = useCallback(async () => {
+    if (!canManageUsers) return;
+    try {
+      const list = await apiRequest<AdminAuthUser[]>("/api/admin/auth/users");
+      if (Array.isArray(list)) setAdminUsers(list);
+    } catch {
+      // Ignore if backend is offline during local prototype inspection
+    }
+  }, [canManageUsers, apiRequest]);
+
+  useEffect(() => {
+    void loadAdminUsers();
+  }, [loadAdminUsers]);
+
+  const handlePasswordChange = async () => {
+    if (!currentPassword || newPassword.length < 8) {
+      toast.error("Enter your current password and a new password (min 8 characters).");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error("New password and confirmation do not match.");
+      return;
+    }
+    setPwSaving(true);
+    try {
+      await changePassword(currentPassword, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      toast.success("Password updated successfully.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update password.");
+    } finally {
+      setPwSaving(false);
+    }
+  };
+
+  const handleCreateAdminUser = async () => {
+    if (!newUserName.trim() || !isValidEmail(newUserEmail) || newUserPassword.length < 8) {
+      toast.error("Name, valid email, and password (min 8 chars) are required.");
+      return;
+    }
+    setCreatingUser(true);
+    try {
+      await apiRequest("/api/admin/auth/users", {
+        method: "POST",
+        body: JSON.stringify({
+          name: newUserName.trim(),
+          email: newUserEmail.trim(),
+          password: newUserPassword,
+          role: newUserRole,
+        }),
+      });
+      setNewUserName("");
+      setNewUserEmail("");
+      setNewUserPassword("");
+      toast.success("Admin user created in database.");
+      await loadAdminUsers();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create admin user.");
+    } finally {
+      setCreatingUser(false);
+    }
+  };
+
+  const handleToggleUserStatus = async (target: AdminAuthUser) => {
+    try {
+      await apiRequest(`/api/admin/auth/users/${target.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ isActive: !target.isActive }),
+      });
+      toast.success(`${target.email} ${target.isActive ? "disabled" : "activated"}.`);
+      await loadAdminUsers();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update user status.");
+    }
+  };
 
   useEffect(() => {
     setForm(data.settings);
@@ -223,6 +316,90 @@ function SettingsPage() {
       <div className="flex justify-end">
         <Button type="submit"><Save className="size-4" />Save Changes</Button>
       </div>
+
+      <section className="acs-card p-6 space-y-4">
+        <div className="flex items-center gap-2.5">
+          <div className="flex size-8 items-center justify-center rounded-lg bg-secondary text-primary"><KeyRound className="size-4" /></div>
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Account Security & Password</h2>
+            <p className="text-xs text-muted-foreground">Signed in as {user?.email ?? form.adminEmail} ({user?.role ?? "admin"})</p>
+          </div>
+        </div>
+        <Separator />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="pw-current">Current Password</Label>
+            <Input id="pw-current" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="pw-new">New Password</Label>
+            <Input id="pw-new" type="password" placeholder="Min 8 characters" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="pw-confirm">Confirm New Password</Label>
+            <Input id="pw-confirm" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <Button type="button" variant="outline" disabled={pwSaving} onClick={() => void handlePasswordChange()}>
+            {pwSaving ? "Updating..." : "Update Password"}
+          </Button>
+        </div>
+      </section>
+
+      {canManageUsers && (
+        <section className="acs-card p-6 space-y-4">
+          <div className="flex items-center gap-2.5">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-secondary text-primary"><ShieldCheck className="size-4" /></div>
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">Authorized Admin Accounts</h2>
+              <p className="text-xs text-muted-foreground">Only active accounts stored in MongoDB can sign in to ACS Admin</p>
+            </div>
+          </div>
+          <Separator />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+            <Input placeholder="Full name" value={newUserName} onChange={(e) => setNewUserName(e.target.value)} />
+            <Input type="email" placeholder="Email address" value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)} />
+            <Input type="password" placeholder="Password (min 8 chars)" value={newUserPassword} onChange={(e) => setNewUserPassword(e.target.value)} />
+            <div className="flex gap-2">
+              <Select value={newUserRole} onValueChange={(v) => setNewUserRole(v as AdminUserRole)}>
+                <SelectTrigger className="flex-1"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="super_admin">Super Admin</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="operations">Operations</SelectItem>
+                  <SelectItem value="payroll">Payroll</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button type="button" disabled={creatingUser} onClick={() => void handleCreateAdminUser()}>
+                <UserPlus className="size-4" />Add
+              </Button>
+            </div>
+          </div>
+          {adminUsers.length > 0 && (
+            <div className="divide-y divide-border rounded-lg border">
+              {adminUsers.map((acct) => (
+                <div key={acct.id} className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 text-xs">
+                  <div>
+                    <p className="font-semibold text-foreground">{acct.name} <span className="font-normal text-muted-foreground">({acct.email})</span></p>
+                    <p className="text-[11px] text-muted-foreground">Role: {acct.role}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", acct.isActive ? "bg-success-soft text-success" : "bg-danger-soft text-danger")}>
+                      {acct.isActive ? "Active" : "Disabled"}
+                    </span>
+                    {acct.id !== user?.id && (
+                      <Button type="button" size="sm" variant="outline" onClick={() => void handleToggleUserStatus(acct)}>
+                        {acct.isActive ? "Disable" : "Activate"}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
     </form>
   );
 }
