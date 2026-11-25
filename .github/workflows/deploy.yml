@@ -29,5 +29,5 @@ jobs:
             pm2 stop acs-admin 2>/dev/null || true
             rm -rf .output .tanstack
             npm run build
-            pm2 restart acs-admin || pm2 start ecosystem.config.js --only acs-admin
+            pm2 restart acs-admin || pm2 start ecosystem.config.cjs --only acs-admin
             pm2 save

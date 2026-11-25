@@ -43,7 +43,7 @@ cd /var/www/acs-admin
 npm install
 npm run build
 
-pm2 start ecosystem.config.js --only acs-admin
+pm2 start ecosystem.config.cjs --only acs-admin
 pm2 save
 ```
 
