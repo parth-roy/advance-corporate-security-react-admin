@@ -1,0 +1,33 @@
+name: Deploy ACS Admin to DigitalOcean
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Deploy to Droplet via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          command_timeout: 45m
+          script: |
+            set -e
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            cd /var/www/acs-admin
+            git fetch origin main
+            git reset --hard origin/main
+            npm install
+            pm2 stop acs-admin 2>/dev/null || true
+            rm -rf .output .tanstack
+            npm run build
+            pm2 restart acs-admin || pm2 start ecosystem.config.js --only acs-admin
+            pm2 save
