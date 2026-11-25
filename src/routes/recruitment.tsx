@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { CheckCircle2, Eye, Pencil, Plus, Search, Trash2, UserCheck, UserPlus, Users, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -19,12 +19,25 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { StatCard } from "@/components/acs/StatCard";
 import { StatusBadge } from "@/components/acs/StatusBadge";
 import { CandidateDrawer } from "@/components/recruitment/CandidateDrawer";
-import { CandidateFormDialog } from "@/components/recruitment/CandidateFormDialog";
+import { EmploymentApplicationForm } from "@/components/recruitment/EmploymentApplicationForm";
 import { ACS_LOCATIONS } from "@/lib/acs-seed";
 import { useAcsStore } from "@/lib/acs-store";
 import type { Candidate, CandidateStatus } from "@/lib/acs-types";
 
+interface RecruitmentSearch {
+  mode?: "new" | "edit";
+  id?: string;
+}
+
 export const Route = createFileRoute("/recruitment")({
+  validateSearch: (search: Record<string, unknown>): RecruitmentSearch => {
+    const mode = search["mode"] === "new" || search["mode"] === "edit" ? search["mode"] : undefined;
+    const id = typeof search["id"] === "string" && search["id"].trim() ? search["id"] : undefined;
+    return {
+      ...(mode ? { mode } : {}),
+      ...(id ? { id } : {}),
+    };
+  },
   head: () => ({
     meta: [
       { title: "Recruitment — ACS Admin Panel" },
@@ -40,11 +53,12 @@ export const Route = createFileRoute("/recruitment")({
 
 function RecruitmentPage() {
   const { data, addCandidate, updateCandidate, deleteCandidate } = useAcsStore();
+  const { mode, id } = Route.useSearch();
+  const navigate = useNavigate({ from: Route.fullPath });
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [locationFilter, setLocationFilter] = useState("All");
-  const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<Candidate | null>(null);
   const [viewing, setViewing] = useState<Candidate | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Candidate | null>(null);
 
@@ -92,6 +106,32 @@ function RecruitmentPage() {
     toast.success(`${candidate.fullName} moved to ${status}.`);
   };
 
+  const openNewFormPage = () => {
+    void navigate({ search: { mode: "new" } });
+  };
+
+  const openEditFormPage = (candidate: Candidate) => {
+    setViewing(null);
+    void navigate({ search: { mode: "edit", id: candidate.id } });
+  };
+
+  const closeFormPage = () => {
+    void navigate({ search: {} });
+  };
+
+  if (mode === "new" || mode === "edit") {
+    const editingCandidate =
+      mode === "edit" && id ? data.candidates.find((c) => c.id === id) ?? null : null;
+
+    return (
+      <EmploymentApplicationForm
+        editing={editingCandidate}
+        onCancel={closeFormPage}
+        onSave={handleSave}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -107,7 +147,7 @@ function RecruitmentPage() {
           <div className="flex flex-1 flex-col gap-2.5 sm:flex-row sm:items-center">
             <div className="relative flex-1 sm:max-w-xs">
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search candidate, mobile, position..." className="pl-9" />
+              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search employee, mobile, designation..." className="pl-9" />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-full sm:w-40"><SelectValue placeholder="Status" /></SelectTrigger>
@@ -129,8 +169,8 @@ function RecruitmentPage() {
               </SelectContent>
             </Select>
           </div>
-          <Button onClick={() => { setEditing(null); setFormOpen(true); }}>
-            <Plus className="size-4" />Add Candidate
+          <Button onClick={openNewFormPage}>
+            <Plus className="size-4" />Add Employee
           </Button>
         </div>
 
@@ -138,10 +178,10 @@ function RecruitmentPage() {
           <Table>
             <TableHeader>
               <TableRow className="acs-table-header hover:bg-transparent">
-                <TableHead>Candidate Name</TableHead>
+                <TableHead>Employee / Applicant Name</TableHead>
                 <TableHead>Mobile Number</TableHead>
-                <TableHead>Applied Position</TableHead>
-                <TableHead>Location</TableHead>
+                <TableHead>Designation</TableHead>
+                <TableHead>Site / Location</TableHead>
                 <TableHead>Experience</TableHead>
                 <TableHead>Application Date</TableHead>
                 <TableHead>Status</TableHead>
@@ -151,7 +191,7 @@ function RecruitmentPage() {
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">No matching candidates found.</TableCell>
+                  <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">No matching records found.</TableCell>
                 </TableRow>
               ) : (
                 filtered.map((cand) => (
@@ -166,7 +206,7 @@ function RecruitmentPage() {
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
                         <Button size="icon" variant="ghost" aria-label={`View ${cand.fullName}`} onClick={() => setViewing(cand)}><Eye className="size-4" /></Button>
-                        <Button size="icon" variant="ghost" aria-label={`Edit ${cand.fullName}`} onClick={() => { setEditing(cand); setFormOpen(true); }}><Pencil className="size-4" /></Button>
+                        <Button size="icon" variant="ghost" aria-label={`Edit ${cand.fullName}`} onClick={() => openEditFormPage(cand)}><Pencil className="size-4" /></Button>
                         <Button size="icon" variant="ghost" aria-label={`Delete ${cand.fullName}`} onClick={() => setDeleteTarget(cand)}><Trash2 className="size-4 text-danger" /></Button>
                       </div>
                     </TableCell>
@@ -178,18 +218,17 @@ function RecruitmentPage() {
         </div>
       </section>
 
-      <CandidateFormDialog open={formOpen} onOpenChange={setFormOpen} editing={editing} onSave={handleSave} />
-      <CandidateDrawer candidate={viewing} onClose={() => setViewing(null)} onEdit={(c) => { setViewing(null); setEditing(c); setFormOpen(true); }} onStatusChange={handleStatusChange} />
+      <CandidateDrawer candidate={viewing} onClose={() => setViewing(null)} onEdit={openEditFormPage} onStatusChange={handleStatusChange} />
 
       <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete candidate?</AlertDialogTitle>
+            <AlertDialogTitle>Delete record?</AlertDialogTitle>
             <AlertDialogDescription>Remove {deleteTarget?.fullName} from the recruitment pipeline. This cannot be undone.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { if (deleteTarget) { deleteCandidate(deleteTarget.id); toast.success("Candidate removed."); setDeleteTarget(null); } }}>
+            <AlertDialogAction onClick={() => { if (deleteTarget) { deleteCandidate(deleteTarget.id); toast.success("Record removed."); setDeleteTarget(null); } }}>
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

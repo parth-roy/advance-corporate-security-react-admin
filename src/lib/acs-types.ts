@@ -1,15 +1,45 @@
 export type CandidateStatus = "New" | "Shortlisted" | "Selected" | "Rejected";
 
+export interface FamilyMember {
+  name: string;
+  relation: string;
+  dateOfBirth: string;
+}
+
 export interface Candidate {
   id: string;
   fullName: string;
+  fatherOrHusbandName?: string;
+  dateOfBirth?: string;
+  permanentAddress?: string;
+  presentAddress?: string;
+  maritalStatus?: string;
+  highestQualification?: string;
   mobile: string;
   email: string;
-  position: string;
-  location: string;
+  height?: string;
+  weight?: string;
+  chest?: string;
+  position: string; // Designation
+  identificationMark?: string;
+  location: string; // Site
   experience: string;
+  serviceCategory?: "Civil" | "Defense";
+  reference?: string;
   applicationDate: string;
   status: CandidateStatus;
+  dateOfJoining?: string;
+  joiningAs?: string;
+  salary?: string;
+  nomineeName?: string;
+  esiHolder?: "Yes" | "No";
+  esiNumber?: string;
+  uanNumber?: string;
+  familyMembers?: FamilyMember[];
+  declarationAccepted?: boolean;
+  declarationDate?: string;
+  declarationPlace?: string;
+  applicantSignature?: string;
   resumeName: string;
   remarks: string;
 }

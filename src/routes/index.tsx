@@ -57,10 +57,10 @@ function DashboardPage() {
         </div>
         <div className="flex flex-wrap gap-2.5">
           <Button asChild size="sm">
-            <Link to="/recruitment"><UserPlus className="size-4" />Add Candidate</Link>
+            <Link to="/recruitment" search={{ mode: "new" }}><UserPlus className="size-4" />Add Employee</Link>
           </Button>
           <Button size="sm" variant="outline" onClick={() => setEmpDialogOpen(true)}>
-            <Users className="size-4" />Add Employee
+            <Users className="size-4" />Quick Assign
           </Button>
           <Button asChild size="sm" variant="outline">
             <Link to="/attendance"><CalendarCheck2 className="size-4" />Mark Attendance</Link>
