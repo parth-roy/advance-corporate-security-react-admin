@@ -8,6 +8,7 @@ export interface FamilyMember {
 
 export interface Candidate {
   id: string;
+  employeeId?: string;
   fullName: string;
   fatherOrHusbandName?: string;
   dateOfBirth?: string;
@@ -22,9 +23,10 @@ export interface Candidate {
   chest?: string;
   position: string; // Designation
   identificationMark?: string;
+  identificationMarks?: string[];
   location: string; // Site
   experience: string;
-  serviceCategory?: "Civil" | "Defense";
+  serviceCategory?: string;
   reference?: string;
   applicationDate: string;
   status: CandidateStatus;
@@ -32,7 +34,7 @@ export interface Candidate {
   joiningAs?: string;
   salary?: string;
   nomineeName?: string;
-  esiHolder?: "Yes" | "No";
+  esiHolder?: "Yes" | "No" | "";
   esiNumber?: string;
   uanNumber?: string;
   familyMembers?: FamilyMember[];
@@ -45,20 +47,27 @@ export interface Candidate {
 }
 
 export type UniformCategory =
-  | "Security Uniform"
-  | "Security Shoes"
-  | "Shirts"
-  | "Trousers"
-  | "Belts"
-  | "Caps"
-  | "Winter Uniform"
-  | "Accessories";
+  | "Shirt"
+  | "T-Shirt"
+  | "Pant"
+  | "Belt"
+  | "Shoe"
+  | "Badge"
+  | "Cap"
+  | "Lanyard + Whistle"
+  | "Safety Shoe"
+  | "Safety Gloves"
+  | "Jacket"
+  | "Safety Helmet"
+  | "ID Card";
 
 export interface UniformItem {
   id: string;
   name: string;
   category: UniformCategory;
+  subCategory?: string;
   size: string;
+  unitPrice: number;
   availableQty: number;
   issuedQty: number;
   lastUpdated: string;
@@ -66,15 +75,22 @@ export interface UniformItem {
 
 export interface UniformIssueRecord {
   id: string;
+  batchId?: string;
   employeeId: string;
   employeeName: string;
   site: string;
   itemId: string;
   itemName: string;
+  category?: string;
+  subCategory?: string;
   size: string;
   quantity: number;
+  unitPrice: number;
+  registrationCharge?: number;
+  totalAmount: number;
   issueDate: string;
   returnDate?: string;
+  remarks?: string;
   status: "Issued" | "Returned";
 }
 
@@ -87,7 +103,13 @@ export interface UniformStockLog {
   note: string;
 }
 
-export type AttendanceStatus = "Present" | "Absent" | "Half Day" | "Leave" | "Weekly Off";
+export type AttendanceStatus =
+  | "Present"
+  | "Double Duty"
+  | "Absent"
+  | "Half Day"
+  | "Leave"
+  | "Weekly Off";
 
 export interface AttendanceRecord {
   id: string;
@@ -100,6 +122,9 @@ export interface AttendanceRecord {
   checkOut: string;
   workingHours: string;
   status: AttendanceStatus;
+  normalDuty?: number;
+  extraDuty?: number;
+  remarks?: string;
 }
 
 export type StatutoryStatus = "Active" | "Pending" | "Exempt";
@@ -220,6 +245,7 @@ export interface AcsSettings {
   emailAlerts: boolean;
   compactTables: boolean;
   defaultMonth: string;
+  uniformRegistrationCharge?: number;
 }
 
 export interface AcsStoreData {

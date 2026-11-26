@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
-import { Building2, KeyRound, Mail, Save, ShieldCheck, SlidersHorizontal, Upload, User, UserPlus } from "lucide-react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Building2, Mail, Save, ShieldCheck, SlidersHorizontal, Upload, UserCircle2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { AcsLogo } from "@/components/acs/AcsLogo";
+import { AdminProfileView } from "@/components/settings/AdminProfileView";
 import { cn } from "@/lib/utils";
 import { PAYROLL_MONTHS } from "@/lib/acs-seed";
 import { useAcsStore } from "@/lib/acs-store";
@@ -47,6 +48,9 @@ function ToggleSwitch({
 }
 
 export const Route = createFileRoute("/settings")({
+  validateSearch: (search: Record<string, unknown>): { tab: "profile" | "settings" } => ({
+    tab: search["tab"] === "profile" ? "profile" : "settings",
+  }),
   head: () => ({
     meta: [
       { title: "Settings & Profile — ACS Admin Panel" },
@@ -61,21 +65,25 @@ export const Route = createFileRoute("/settings")({
 });
 
 function SettingsPage() {
-  const { data, updateSettings } = useAcsStore();
-  const { user, changePassword, apiRequest } = useAuth();
+  const { tab } = Route.useSearch();
+  if (tab === "profile") {
+    return <AdminProfileView />;
+  }
+  return <WorkspaceSettingsView />;
+}
+
+function WorkspaceSettingsView() {
+  const { data, updateSettings, recordActivity } = useAcsStore();
+  const { user, apiRequest } = useAuth();
   const [form, setForm] = useState(data.settings);
   const [logoFile, setLogoFile] = useState("");
   const [error, setError] = useState("");
-
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [pwSaving, setPwSaving] = useState(false);
 
   const canManageUsers = user?.role === "super_admin" || user?.role === "admin";
   const [adminUsers, setAdminUsers] = useState<AdminAuthUser[]>([]);
   const [newUserName, setNewUserName] = useState("");
   const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserPhone, setNewUserPhone] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("");
   const [newUserRole, setNewUserRole] = useState<AdminUserRole>("admin");
   const [creatingUser, setCreatingUser] = useState(false);
@@ -94,29 +102,6 @@ function SettingsPage() {
     void loadAdminUsers();
   }, [loadAdminUsers]);
 
-  const handlePasswordChange = async () => {
-    if (!currentPassword || newPassword.length < 8) {
-      toast.error("Enter your current password and a new password (min 8 characters).");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      toast.error("New password and confirmation do not match.");
-      return;
-    }
-    setPwSaving(true);
-    try {
-      await changePassword(currentPassword, newPassword);
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-      toast.success("Password updated successfully.");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to update password.");
-    } finally {
-      setPwSaving(false);
-    }
-  };
-
   const handleCreateAdminUser = async () => {
     if (!newUserName.trim() || !isValidEmail(newUserEmail) || newUserPassword.length < 8) {
       toast.error("Name, valid email, and password (min 8 chars) are required.");
@@ -129,12 +114,19 @@ function SettingsPage() {
         body: JSON.stringify({
           name: newUserName.trim(),
           email: newUserEmail.trim(),
+          phone: newUserPhone.trim(),
           password: newUserPassword,
           role: newUserRole,
         }),
       });
+      recordActivity(
+        "Admin account created",
+        `${newUserEmail.trim()} (${newUserRole}) added to ACS Admin.`,
+        "Auth",
+      );
       setNewUserName("");
       setNewUserEmail("");
+      setNewUserPhone("");
       setNewUserPassword("");
       toast.success("Admin user created in database.");
       await loadAdminUsers();
@@ -151,6 +143,11 @@ function SettingsPage() {
         method: "PATCH",
         body: JSON.stringify({ isActive: !target.isActive }),
       });
+      recordActivity(
+        "Admin account status updated",
+        `${target.email} was ${target.isActive ? "disabled" : "activated"}.`,
+        "Auth",
+      );
       toast.success(`${target.email} ${target.isActive ? "disabled" : "activated"}.`);
       await loadAdminUsers();
     } catch (err) {
@@ -164,49 +161,35 @@ function SettingsPage() {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.adminName.trim() || !form.companyName.trim()) {
-      setError("Admin Name and Company Name are required.");
+    if (!form.companyName.trim()) {
+      setError("Company Name is required.");
       return;
     }
-    if (!isValidEmail(form.adminEmail) || !isValidEmail(form.supportEmail)) {
-      setError("Please enter valid administrator and company support emails.");
+    if (!isValidEmail(form.supportEmail)) {
+      setError("Please enter a valid company operations email.");
       return;
     }
     updateSettings(form);
     setError("");
-    toast.success("Settings and profile saved.");
+    toast.success("Workspace settings saved.");
   };
 
   return (
     <form onSubmit={handleSave} className="mx-auto max-w-4xl space-y-6">
-      <section className="acs-card p-6 space-y-4">
-        <div className="flex items-center gap-2.5">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-secondary text-primary"><User className="size-4" /></div>
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">Admin Profile</h2>
-            <p className="text-xs text-muted-foreground">Primary administrator identity shown in the top header</p>
-          </div>
+      <div className="acs-card flex flex-wrap items-center justify-between gap-3 px-6 py-4">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Workspace & Organization Settings</h2>
+          <p className="text-xs text-muted-foreground">
+            Manage company details, invoicing contacts, preferences, and admin access.
+          </p>
         </div>
-        <Separator />
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="set-admin-name">Full Name</Label>
-            <Input id="set-admin-name" value={form.adminName} onChange={(e) => setForm({ ...form, adminName: e.target.value })} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="set-admin-role">Role / Title</Label>
-            <Input id="set-admin-role" value={form.adminRole} onChange={(e) => setForm({ ...form, adminRole: e.target.value })} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="set-admin-email">Email Address</Label>
-            <Input id="set-admin-email" type="email" value={form.adminEmail} onChange={(e) => setForm({ ...form, adminEmail: e.target.value })} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="set-admin-phone">Phone Number</Label>
-            <Input id="set-admin-phone" value={form.adminPhone} onChange={(e) => setForm({ ...form, adminPhone: e.target.value })} />
-          </div>
-        </div>
-      </section>
+        <Button asChild type="button" variant="outline" size="sm">
+          <Link to="/settings" search={{ tab: "profile" }}>
+            <UserCircle2 className="size-4" />
+            Edit My Admin Profile
+          </Link>
+        </Button>
+      </div>
 
       <section className="acs-card p-6 space-y-4">
         <div className="flex items-center gap-2.5">
@@ -317,36 +300,6 @@ function SettingsPage() {
         <Button type="submit"><Save className="size-4" />Save Changes</Button>
       </div>
 
-      <section className="acs-card p-6 space-y-4">
-        <div className="flex items-center gap-2.5">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-secondary text-primary"><KeyRound className="size-4" /></div>
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">Account Security & Password</h2>
-            <p className="text-xs text-muted-foreground">Signed in as {user?.email ?? form.adminEmail} ({user?.role ?? "admin"})</p>
-          </div>
-        </div>
-        <Separator />
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="pw-current">Current Password</Label>
-            <Input id="pw-current" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="pw-new">New Password</Label>
-            <Input id="pw-new" type="password" placeholder="Min 8 characters" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="pw-confirm">Confirm New Password</Label>
-            <Input id="pw-confirm" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
-          </div>
-        </div>
-        <div className="flex justify-end">
-          <Button type="button" variant="outline" disabled={pwSaving} onClick={() => void handlePasswordChange()}>
-            {pwSaving ? "Updating..." : "Update Password"}
-          </Button>
-        </div>
-      </section>
-
       {canManageUsers && (
         <section className="acs-card p-6 space-y-4">
           <div className="flex items-center gap-2.5">
@@ -357,9 +310,10 @@ function SettingsPage() {
             </div>
           </div>
           <Separator />
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
             <Input placeholder="Full name" value={newUserName} onChange={(e) => setNewUserName(e.target.value)} />
             <Input type="email" placeholder="Email address" value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)} />
+            <Input type="tel" placeholder="Phone (optional)" value={newUserPhone} onChange={(e) => setNewUserPhone(e.target.value)} />
             <Input type="password" placeholder="Password (min 8 chars)" value={newUserPassword} onChange={(e) => setNewUserPassword(e.target.value)} />
             <div className="flex gap-2">
               <Select value={newUserRole} onValueChange={(v) => setNewUserRole(v as AdminUserRole)}>
@@ -382,7 +336,9 @@ function SettingsPage() {
                 <div key={acct.id} className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 text-xs">
                   <div>
                     <p className="font-semibold text-foreground">{acct.name} <span className="font-normal text-muted-foreground">({acct.email})</span></p>
-                    <p className="text-[11px] text-muted-foreground">Role: {acct.role}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Role: {acct.role}{acct.phone ? ` · ${acct.phone}` : ""}{acct.jobTitle ? ` · ${acct.jobTitle}` : ""}
+                    </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", acct.isActive ? "bg-success-soft text-success" : "bg-danger-soft text-danger")}>

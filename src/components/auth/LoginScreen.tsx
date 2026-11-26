@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from "react";
 import { Eye, EyeOff, Loader2, Lock, Mail, ShieldCheck } from "lucide-react";
-import { AcsLogo } from "@/components/acs/AcsLogo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,7 +37,16 @@ export function LoginScreen() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-10">
       <div className="w-full max-w-md space-y-6">
         <div className="flex flex-col items-center text-center">
-          <AcsLogo />
+          <picture>
+            <source srcSet="/images/acs-official-logo.avif" type="image/avif" />
+            <img
+              src="/images/acs-official-logo.webp"
+              alt="Advance Corporate Security Logo"
+              width={1313}
+              height={536}
+              className="block h-24 w-auto max-w-full object-contain sm:h-28"
+            />
+          </picture>
           <h1 className="mt-5 text-2xl font-bold tracking-tight text-foreground">Admin Portal Sign In</h1>
           <p className="mt-1.5 text-sm text-muted-foreground">
             Sign in with your authorized Advance Corporate Security credentials.

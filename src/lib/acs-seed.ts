@@ -1,4 +1,4 @@
-import type { AcsStoreData } from "./acs-types";
+import type { AcsStoreData, UniformCategory } from "./acs-types";
 
 export const ACS_LOCATIONS = [
   "TechPark Phase II, Bengaluru",
@@ -8,18 +8,174 @@ export const ACS_LOCATIONS = [
   "DLF IT SEZ, Noida",
 ] as const;
 
-export const UNIFORM_CATEGORIES = [
-  "Security Uniform",
-  "Security Shoes",
-  "Shirts",
-  "Trousers",
-  "Belts",
-  "Caps",
-  "Winter Uniform",
-  "Accessories",
+export const UNIFORM_CATEGORIES: readonly UniformCategory[] = [
+  "Shirt",
+  "T-Shirt",
+  "Pant",
+  "Belt",
+  "Shoe",
+  "Badge",
+  "Cap",
+  "Lanyard + Whistle",
+  "Safety Shoe",
+  "Safety Gloves",
+  "Jacket",
+  "Safety Helmet",
+  "ID Card",
 ] as const;
 
+export const UNIFORM_SUBCATEGORIES: Partial<Record<UniformCategory, readonly string[]>> = {
+  Shirt: ["Black Shirt", "Blue Shirt", "Ward Boy Shirt"],
+  Pant: ["Black Pant", "Blue Pant"],
+};
+
+export const UNIFORM_DEFAULT_PRICES: Record<UniformCategory, number> = {
+  Shirt: 450,
+  "T-Shirt": 285,
+  Pant: 460,
+  Belt: 120,
+  Shoe: 480,
+  Badge: 0,
+  Cap: 120,
+  "Lanyard + Whistle": 90,
+  "Safety Shoe": 570,
+  "Safety Gloves": 180,
+  Jacket: 550,
+  "Safety Helmet": 200,
+  "ID Card": 50,
+};
+
+export const DEFAULT_UNIFORM_REGISTRATION_CHARGE = 250;
+
 export const PAYROLL_MONTHS = ["November 2026", "October 2026", "September 2026"] as const;
+
+export const ACS_DESIGNATION_GROUPS: { group: string; roles: string[] }[] = [
+  {
+    group: "Security & Guarding Services",
+    roles: [
+      "Security Guard",
+      "Senior Security Officer",
+      "Lady Security Officer",
+      "Armed Guard / Gunman",
+      "Security Supervisor",
+      "Night Patrol Officer",
+      "CCTV Control Operator",
+      "Fire Safety Officer / Marshall",
+      "Bouncer / Event Security",
+      "VIP / Executive Protection Officer (PSO)",
+      "Reception Security Executive",
+      "Gatekeeper / Access Control Guard",
+    ],
+  },
+  {
+    group: "Facility Management & Housekeeping",
+    roles: [
+      "Housekeeping Staff / Cleaner",
+      "Housekeeping Supervisor",
+      "Janitor / Deep Cleaning Crew",
+      "Facade & Glass Cleaner",
+      "Pest Control Technician",
+      "Ward Boy / Hospital Attendant",
+      "Facility Supervisor / Manager",
+    ],
+  },
+  {
+    group: "Technical, MEP & Maintenance",
+    roles: [
+      "Electrician (HT / LT)",
+      "DG / Generator Operator",
+      "Plumber",
+      "STP / WTP Operator",
+      "HVAC / AC & Chiller Technician",
+      "Lift / Elevator Operator",
+      "Carpenter",
+      "Painter / Civil Maintenance Worker",
+      "Welder / Fitter",
+      "Fire Alarm & BMS Technician",
+    ],
+  },
+  {
+    group: "Warehouse, Logistics & Blue-Collar Labour",
+    roles: [
+      "Warehouse Helper",
+      "Loader / Unloader (Hamali Labour)",
+      "Picker / Packer",
+      "Inventory / Dispatch Assistant",
+      "Forklift / Material Handling Operator",
+      "Heavy Machinery Shifting / Rigging Crew",
+      "Factory Production Helper",
+      "Machine Operator (CNC / Panel Saw / Lathe)",
+      "General Unskilled Labour",
+      "Semi-Skilled / Skilled Worker",
+    ],
+  },
+  {
+    group: "Office Support, Fleet & Horticulture",
+    roles: [
+      "Office Boy / Peon",
+      "Pantry Boy / Cafeteria Staff",
+      "Front Desk / Admin Executive",
+      "Data Entry / Store Clerk",
+      "Driver (LMV / Commercial / Heavy)",
+      "Delivery / Courier Executive",
+      "Gardener / Mali (Horticulture)",
+      "Landscaping Supervisor",
+    ],
+  },
+];
+
+export const ACS_IDENTIFICATION_MARK_GROUPS: { group: string; marks: string[] }[] = [
+  {
+    group: "Moles (Black / Pigmented Spots)",
+    marks: [
+      "Mole on right cheek",
+      "Mole on left cheek",
+      "Mole on forehead",
+      "Mole near right eyebrow",
+      "Mole near left eyebrow",
+      "Mole on chin",
+      "Mole on right side of neck",
+      "Mole on left side of neck",
+      "Mole on right forearm / wrist",
+      "Mole on left forearm / wrist",
+      "Mole on right hand / finger",
+      "Mole on left hand / finger",
+      "Mole on chest / shoulder",
+    ],
+  },
+  {
+    group: "Scars (Cut / Injury / Burn / Surgical)",
+    marks: [
+      "Cut scar on forehead",
+      "Scar above right eyebrow",
+      "Scar above left eyebrow",
+      "Scar on right cheek",
+      "Scar on left cheek",
+      "Scar on chin",
+      "Cut scar on right hand / palm",
+      "Cut scar on left hand / palm",
+      "Scar on right forearm",
+      "Scar on left forearm",
+      "Burn mark on right arm / hand",
+      "Burn mark on left arm / hand",
+      "Surgical scar on abdomen / chest",
+      "Scar on right / left knee or leg",
+    ],
+  },
+  {
+    group: "Birthmarks & Other Visible Marks",
+    marks: [
+      "Birthmark on right cheek / face",
+      "Birthmark on neck (front / back)",
+      "Birthmark on right shoulder / arm",
+      "Birthmark on left shoulder / arm",
+      "Birthmark on chest / back",
+      "Tattoo mark on right forearm",
+      "Tattoo mark on left forearm",
+      "No visible identification mark (None)",
+    ],
+  },
+];
 
 export const INITIAL_ACS_DATA: AcsStoreData = {
   candidates: [
@@ -32,26 +188,34 @@ export const INITIAL_ACS_DATA: AcsStoreData = {
     { id: "c7", fullName: "Kavita Nair", mobile: "+91 98457 90214", email: "kavita.nair@mail.in", position: "Reception Security Executive", location: "TechPark Phase II, Bengaluru", experience: "3 Years", applicationDate: "2026-11-25", status: "New", resumeName: "Kavita_Nair_CV.pdf", remarks: "Fluent in English and Hindi; strong front-desk protocol." },
   ],
   uniforms: [
-    { id: "u1", name: "ACS Navy Tactical Set", category: "Security Uniform", size: "L", availableQty: 48, issuedQty: 112, lastUpdated: "2026-11-24" },
-    { id: "u2", name: "Steel-Toe Patrol Boots", category: "Security Shoes", size: "9", availableQty: 12, issuedQty: 86, lastUpdated: "2026-11-23" },
-    { id: "u3", name: "Sky Blue Epaulette Shirt", category: "Shirts", size: "M", availableQty: 64, issuedQty: 145, lastUpdated: "2026-11-22" },
-    { id: "u4", name: "Formal Navy Security Trouser", category: "Trousers", size: "34", availableQty: 52, issuedQty: 138, lastUpdated: "2026-11-22" },
-    { id: "u5", name: "Heavy Brass Buckle Belt", category: "Belts", size: "Free", availableQty: 9, issuedQty: 160, lastUpdated: "2026-11-20" },
-    { id: "u6", name: "Embroidered Peak Cap", category: "Caps", size: "Free", availableQty: 36, issuedQty: 120, lastUpdated: "2026-11-19" },
-    { id: "u7", name: "Insulated Night Patrol Jacket", category: "Winter Uniform", size: "XL", availableQty: 7, issuedQty: 54, lastUpdated: "2026-11-24" },
-    { id: "u8", name: "Whistle Lanyard & Badge Kit", category: "Accessories", size: "Std", availableQty: 85, issuedQty: 175, lastUpdated: "2026-11-21" },
+    { id: "u1", name: "Black Shirt", category: "Shirt", subCategory: "Black Shirt", size: "L", unitPrice: 450, availableQty: 50, issuedQty: 0, lastUpdated: "2026-11-26" },
+    { id: "u2", name: "Blue Shirt", category: "Shirt", subCategory: "Blue Shirt", size: "L", unitPrice: 450, availableQty: 50, issuedQty: 0, lastUpdated: "2026-11-26" },
+    { id: "u3", name: "Ward Boy Shirt", category: "Shirt", subCategory: "Ward Boy Shirt", size: "L", unitPrice: 450, availableQty: 40, issuedQty: 0, lastUpdated: "2026-11-26" },
+    { id: "u4", name: "T-Shirt", category: "T-Shirt", subCategory: "", size: "L", unitPrice: 285, availableQty: 50, issuedQty: 0, lastUpdated: "2026-11-26" },
+    { id: "u5", name: "Black Pant", category: "Pant", subCategory: "Black Pant", size: "32", unitPrice: 460, availableQty: 50, issuedQty: 0, lastUpdated: "2026-11-26" },
+    { id: "u6", name: "Blue Pant", category: "Pant", subCategory: "Blue Pant", size: "32", unitPrice: 460, availableQty: 50, issuedQty: 0, lastUpdated: "2026-11-26" },
+    { id: "u7", name: "Belt", category: "Belt", subCategory: "", size: "Free", unitPrice: 120, availableQty: 60, issuedQty: 0, lastUpdated: "2026-11-26" },
+    { id: "u8", name: "Shoe", category: "Shoe", subCategory: "", size: "8", unitPrice: 480, availableQty: 40, issuedQty: 0, lastUpdated: "2026-11-26" },
+    { id: "u9", name: "Badge", category: "Badge", subCategory: "", size: "Std", unitPrice: 0, availableQty: 100, issuedQty: 0, lastUpdated: "2026-11-26" },
+    { id: "u10", name: "Cap", category: "Cap", subCategory: "", size: "Free", unitPrice: 120, availableQty: 60, issuedQty: 0, lastUpdated: "2026-11-26" },
+    { id: "u11", name: "Lanyard + Whistle", category: "Lanyard + Whistle", subCategory: "", size: "Std", unitPrice: 90, availableQty: 80, issuedQty: 0, lastUpdated: "2026-11-26" },
+    { id: "u12", name: "Safety Shoe", category: "Safety Shoe", subCategory: "", size: "8", unitPrice: 570, availableQty: 30, issuedQty: 0, lastUpdated: "2026-11-26" },
+    { id: "u13", name: "Safety Gloves", category: "Safety Gloves", subCategory: "", size: "Free", unitPrice: 180, availableQty: 50, issuedQty: 0, lastUpdated: "2026-11-26" },
+    { id: "u14", name: "Jacket", category: "Jacket", subCategory: "", size: "XL", unitPrice: 550, availableQty: 25, issuedQty: 0, lastUpdated: "2026-11-26" },
+    { id: "u15", name: "Safety Helmet", category: "Safety Helmet", subCategory: "", size: "Free", unitPrice: 200, availableQty: 40, issuedQty: 0, lastUpdated: "2026-11-26" },
+    { id: "u16", name: "ID Card", category: "ID Card", subCategory: "", size: "Std", unitPrice: 50, availableQty: 150, issuedQty: 0, lastUpdated: "2026-11-26" },
   ],
   uniformIssues: [
-    { id: "ui1", employeeId: "ACS-1001", employeeName: "Ramesh Kulkarni", site: "TechPark Phase II, Bengaluru", itemId: "u1", itemName: "ACS Navy Tactical Set", size: "L", quantity: 2, issueDate: "2026-11-15", status: "Issued" },
-    { id: "ui2", employeeId: "ACS-1002", employeeName: "Suresh Chauhan", site: "CyberHub Tower B, Gurugram", itemId: "u2", itemName: "Steel-Toe Patrol Boots", size: "9", quantity: 1, issueDate: "2026-11-12", status: "Issued" },
-    { id: "ui3", employeeId: "ACS-1004", employeeName: "Prakash Nair", site: "HITEC Corporate Park, Hyderabad", itemId: "u7", itemName: "Insulated Night Patrol Jacket", size: "XL", quantity: 1, issueDate: "2026-11-18", status: "Issued" },
-    { id: "ui4", employeeId: "ACS-1003", employeeName: "Anita Pawar", site: "BKC Financial Plaza, Mumbai", itemId: "u3", itemName: "Sky Blue Epaulette Shirt", size: "M", quantity: 2, issueDate: "2026-10-05", returnDate: "2026-11-10", status: "Returned" },
+    { id: "ui1", batchId: "batch-1", employeeId: "ACS/SEC/2026/001", employeeName: "Ramesh Kulkarni", site: "TechPark Phase II, Bengaluru", itemId: "u1", itemName: "Black Shirt", category: "Shirt", subCategory: "Black Shirt", size: "L", quantity: 2, unitPrice: 450, registrationCharge: 250, totalAmount: 1150, issueDate: "2026-11-15", status: "Issued" },
+    { id: "ui2", batchId: "batch-2", employeeId: "ACS/SEC/2026/002", employeeName: "Suresh Chauhan", site: "CyberHub Tower B, Gurugram", itemId: "u8", itemName: "Shoe", category: "Shoe", subCategory: "", size: "8", quantity: 1, unitPrice: 480, registrationCharge: 0, totalAmount: 480, issueDate: "2026-11-12", status: "Issued" },
+    { id: "ui3", batchId: "batch-3", employeeId: "ACS/SEC/2026/004", employeeName: "Prakash Nair", site: "HITEC Corporate Park, Hyderabad", itemId: "u14", itemName: "Jacket", category: "Jacket", subCategory: "", size: "XL", quantity: 1, unitPrice: 550, registrationCharge: 0, totalAmount: 550, issueDate: "2026-11-18", status: "Issued" },
+    { id: "ui4", batchId: "batch-4", employeeId: "ACS/SEC/2026/003", employeeName: "Anita Pawar", site: "BKC Financial Plaza, Mumbai", itemId: "u2", itemName: "Blue Shirt", category: "Shirt", subCategory: "Blue Shirt", size: "L", quantity: 2, unitPrice: 450, registrationCharge: 0, totalAmount: 900, issueDate: "2026-10-05", returnDate: "2026-11-10", status: "Returned" },
   ],
   stockLogs: [
-    { id: "sl1", itemName: "ACS Navy Tactical Set", action: "Restocked", quantity: 30, date: "2026-11-24", note: "Quarterly vendor replenishment PO-882" },
-    { id: "sl2", itemName: "Insulated Night Patrol Jacket", action: "Issued", quantity: 1, date: "2026-11-18", note: "Issued to Prakash Nair (ACS-1004)" },
-    { id: "sl3", itemName: "Sky Blue Epaulette Shirt", action: "Returned", quantity: 2, date: "2026-11-10", note: "Returned by Anita Pawar (ACS-1003)" },
-    { id: "sl4", itemName: "Steel-Toe Patrol Boots", action: "Issued", quantity: 1, date: "2026-11-12", note: "Issued to Suresh Chauhan (ACS-1002)" },
+    { id: "sl1", itemName: "Black Shirt", action: "Restocked", quantity: 30, date: "2026-11-24", note: "Quarterly vendor replenishment PO-882" },
+    { id: "sl2", itemName: "Jacket", action: "Issued", quantity: 1, date: "2026-11-18", note: "Issued to Prakash Nair (ACS/SEC/2026/004)" },
+    { id: "sl3", itemName: "Blue Shirt", action: "Returned", quantity: 2, date: "2026-11-10", note: "Returned by Anita Pawar (ACS/SEC/2026/003)" },
+    { id: "sl4", itemName: "Shoe", action: "Issued", quantity: 1, date: "2026-11-12", note: "Issued to Suresh Chauhan (ACS/SEC/2026/002)" },
   ],
   attendance: [
     { id: "a1", employeeId: "ACS-1001", employeeName: "Ramesh Kulkarni", designation: "Site Supervisor", location: "TechPark Phase II, Bengaluru", date: "2026-11-25", checkIn: "07:55", checkOut: "16:05", workingHours: "8h 10m", status: "Present" },
@@ -147,10 +311,10 @@ export const INITIAL_ACS_DATA: AcsStoreData = {
     { id: "act5", title: "Attendance synced across 5 sites", detail: "Morning shift attendance recorded for 25 Nov 2026.", module: "Attendance", timestamp: "Yesterday" },
   ],
   settings: {
-    adminName: "Rajesh Sharma",
-    adminRole: "Operations Director",
-    adminEmail: "rajesh.sharma@advancecorporatesecurity.com",
-    adminPhone: "+91 98201 44500",
+    adminName: "",
+    adminRole: "",
+    adminEmail: "",
+    adminPhone: "",
     companyName: "Advance Corporate Security",
     companyWebsite: "https://advancecorporatesecurity.com/",
     companyGstin: "27AAACA8492Q1Z4",
@@ -161,5 +325,6 @@ export const INITIAL_ACS_DATA: AcsStoreData = {
     emailAlerts: true,
     compactTables: false,
     defaultMonth: "November 2026",
+    uniformRegistrationCharge: 250,
   },
 };

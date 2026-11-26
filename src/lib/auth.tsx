@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 
 const AUTH_TOKEN_KEY = "acs_admin_auth_token";
 
@@ -8,9 +8,18 @@ export interface AdminAuthUser {
   id: string;
   name: string;
   email: string;
+  phone?: string;
+  jobTitle?: string;
   role: AdminUserRole;
   isActive: boolean;
   lastLoginAt?: string | null;
+}
+
+export interface UpdateAdminProfilePayload {
+  name: string;
+  email: string;
+  phone: string;
+  jobTitle: string;
 }
 
 export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
@@ -21,6 +30,7 @@ interface AuthContextValue {
   token: string | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateProfile: (payload: UpdateAdminProfilePayload) => Promise<AdminAuthUser>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   apiRequest: <T = unknown>(path: string, init?: RequestInit) => Promise<T>;
 }
@@ -30,13 +40,6 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function getApiBaseUrl(): string {
   const envUrl = (import.meta.env["VITE_API_URL"] as string | undefined)?.trim();
   if (envUrl) return envUrl.replace(/\/+$/, "");
-
-  if (typeof window !== "undefined") {
-    const host = window.location.hostname;
-    if (host === "localhost" || host === "127.0.0.1") {
-      return "http://localhost:4000";
-    }
-  }
   return "https://api.advancecorporatesecurity.com";
 }
 
@@ -64,9 +67,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [user, setUser] = useState<AdminAuthUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const tokenRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    tokenRef.current = token;
+  }, [token]);
 
   const clearSession = useCallback(() => {
     writeStoredToken(null);
+    tokenRef.current = null;
     setToken(null);
     setUser(null);
     setStatus("unauthenticated");
@@ -74,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const apiRequest = useCallback(
     async <T = unknown,>(path: string, init: RequestInit = {}): Promise<T> => {
-      const activeToken = token ?? readStoredToken();
+      const activeToken = tokenRef.current ?? readStoredToken();
       const headers = new Headers(init.headers);
       if (!headers.has("Content-Type") && init.body) {
         headers.set("Content-Type", "application/json");
@@ -107,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       return payload.data as T;
     },
-    [token, clearSession],
+    [clearSession],
   );
 
   useEffect(() => {
@@ -206,8 +215,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [apiRequest],
   );
 
+  const updateProfile = useCallback(
+    async (payload: UpdateAdminProfilePayload) => {
+      const data = await apiRequest<{ user?: AdminAuthUser; token?: string }>("/api/admin/auth/me", {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+      if (data?.token) {
+        writeStoredToken(data.token);
+        setToken(data.token);
+      }
+      if (!data?.user) {
+        throw new Error("Updated profile was not returned by the server.");
+      }
+      setUser(data.user);
+      return data.user;
+    },
+    [apiRequest],
+  );
+
   return (
-    <AuthContext.Provider value={{ status, user, token, login, logout, changePassword, apiRequest }}>
+    <AuthContext.Provider value={{ status, user, token, login, logout, updateProfile, changePassword, apiRequest }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,9 +1,13 @@
-import { FileText, Mail, MapPin, Phone } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { ArrowUpRight, FileText, Mail, MapPin, Phone, Shirt } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { StatusBadge } from "@/components/acs/StatusBadge";
+import { useAcsStore } from "@/lib/acs-store";
 import type { Candidate, CandidateStatus } from "@/lib/acs-types";
+import { formatINR } from "@/lib/acs-utils";
 
 interface CandidateDrawerProps {
   candidate: Candidate | null;
@@ -13,6 +17,17 @@ interface CandidateDrawerProps {
 }
 
 export function CandidateDrawer({ candidate, onClose, onEdit, onStatusChange }: CandidateDrawerProps) {
+  const { data } = useAcsStore();
+
+  const employeeIssues = candidate
+    ? data.uniformIssues.filter((issue) => {
+        const candEmpId = (candidate.employeeId ?? "").trim().toLowerCase();
+        const issEmpId = issue.employeeId.trim().toLowerCase();
+        if (candEmpId && issEmpId && candEmpId === issEmpId) return true;
+        return issue.employeeName.trim().toLowerCase() === candidate.fullName.trim().toLowerCase();
+      })
+    : [];
+
   return (
     <Sheet open={Boolean(candidate)} onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
@@ -20,7 +35,14 @@ export function CandidateDrawer({ candidate, onClose, onEdit, onStatusChange }: 
           <div className="space-y-5">
             <SheetHeader className="text-left">
               <div className="flex items-center justify-between gap-2 pr-6">
-                <SheetTitle>{candidate.fullName}</SheetTitle>
+                <div className="space-y-1">
+                  <SheetTitle>{candidate.fullName}</SheetTitle>
+                  {candidate.employeeId && (
+                    <Badge variant="info" className="font-mono text-[11px]">
+                      {candidate.employeeId}
+                    </Badge>
+                  )}
+                </div>
                 <StatusBadge status={candidate.status} />
               </div>
               <SheetDescription>{candidate.position} · Applied {candidate.applicationDate}</SheetDescription>
@@ -47,7 +69,7 @@ export function CandidateDrawer({ candidate, onClose, onEdit, onStatusChange }: 
               <div className="rounded-lg border p-3">
                 <p className="text-xs text-muted-foreground">Experience / Category</p>
                 <p className="mt-0.5 font-semibold text-foreground">
-                  {candidate.experience}{candidate.serviceCategory ? ` (${candidate.serviceCategory})` : ""}
+                  {candidate.experience || "—"}{candidate.serviceCategory ? ` (${candidate.serviceCategory})` : ""}
                 </p>
               </div>
               <div className="rounded-lg border p-3">
@@ -123,6 +145,66 @@ export function CandidateDrawer({ candidate, onClose, onEdit, onStatusChange }: 
                 </div>
               </div>
             )}
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="inline-flex items-center gap-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                  <Shirt className="size-3.5" />
+                  Issued Uniforms & Accessories ({employeeIssues.length})
+                </p>
+                <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs">
+                  <Link
+                    to="/uniforms"
+                    search={{ view: "issue", candidateId: candidate.id }}
+                    onClick={onClose}
+                  >
+                    <ArrowUpRight className="size-3.5" />
+                    Issue Uniform
+                  </Link>
+                </Button>
+              </div>
+
+              {employeeIssues.length === 0 ? (
+                <div className="rounded-lg border bg-background p-3 text-xs text-muted-foreground">
+                  No uniforms or accessories issued to this employee yet.
+                </div>
+              ) : (
+                <div className="divide-y divide-border rounded-lg border text-xs">
+                  {employeeIssues.map((iss) => {
+                    const label = iss.subCategory || iss.itemName || iss.category || "Uniform Item";
+                    const computedTotal =
+                      iss.totalAmount ??
+                      iss.quantity * (iss.unitPrice ?? 0) + (iss.registrationCharge ?? 0);
+                    return (
+                      <div key={iss.id} className="flex items-start justify-between gap-3 px-3 py-2.5">
+                        <div className="space-y-0.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="font-semibold text-foreground">{label}</span>
+                            <span className="text-muted-foreground">({iss.size}) × {iss.quantity}</span>
+                            {iss.registrationCharge ? (
+                              <Badge variant="info" className="px-1.5 py-0 text-[10px]">
+                                Reg {formatINR(iss.registrationCharge)}
+                              </Badge>
+                            ) : null}
+                          </div>
+                          <p className="text-[11px] text-muted-foreground">
+                            Issued: {iss.issueDate}
+                            {iss.status === "Returned" && iss.returnDate ? ` · Returned: ${iss.returnDate}` : ""}
+                            {iss.site ? ` · ${iss.site}` : ""}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-1">
+                          <StatusBadge status={iss.status} />
+                          <span className="font-semibold tabular-nums text-foreground">
+                            {formatINR(computedTotal)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
 
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Remarks</p>

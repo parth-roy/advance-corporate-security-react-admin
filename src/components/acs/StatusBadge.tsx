@@ -5,6 +5,7 @@ const STATUS_VARIANT_MAP: Record<string, BadgeProps["variant"]> = {
   "In Stock": "success",
   Returned: "success",
   Present: "success",
+  "Double Duty": "info",
   Active: "success",
   Filed: "success",
   Processed: "success",
@@ -23,6 +24,7 @@ const STATUS_VARIANT_MAP: Record<string, BadgeProps["variant"]> = {
   Absent: "danger",
   Overdue: "danger",
   "Weekly Off": "neutral",
+  Unmarked: "neutral",
   Exempt: "neutral",
 };
 

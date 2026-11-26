@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { CheckCircle2, Eye, Pencil, Plus, Search, Trash2, UserCheck, UserPlus, Users, XCircle } from "lucide-react";
+import { CheckCircle2, Eye, Pencil, Plus, RotateCcw, Search, Trash2, UserCheck, UserPlus, Users, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -20,7 +20,6 @@ import { StatCard } from "@/components/acs/StatCard";
 import { StatusBadge } from "@/components/acs/StatusBadge";
 import { CandidateDrawer } from "@/components/recruitment/CandidateDrawer";
 import { EmploymentApplicationForm } from "@/components/recruitment/EmploymentApplicationForm";
-import { ACS_LOCATIONS } from "@/lib/acs-seed";
 import { useAcsStore } from "@/lib/acs-store";
 import type { Candidate, CandidateStatus } from "@/lib/acs-types";
 
@@ -58,9 +57,30 @@ function RecruitmentPage() {
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
-  const [locationFilter, setLocationFilter] = useState("All");
+  const [siteFilter, setSiteFilter] = useState("All");
+  const [designationFilter, setDesignationFilter] = useState("All");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [viewing, setViewing] = useState<Candidate | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Candidate | null>(null);
+
+  const availableSites = useMemo(() => {
+    const set = new Set<string>();
+    data.candidates.forEach((c) => {
+      const site = (c.location ?? "").trim();
+      if (site) set.add(site);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [data.candidates]);
+
+  const availableDesignations = useMemo(() => {
+    const set = new Set<string>();
+    data.candidates.forEach((c) => {
+      const pos = (c.position ?? "").trim();
+      if (pos) set.add(pos);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [data.candidates]);
 
   const counts = useMemo(
     () => ({
@@ -80,14 +100,40 @@ function RecruitmentPage() {
         const matchesSearch =
           !q ||
           c.fullName.toLowerCase().includes(q) ||
+          (c.employeeId ?? "").toLowerCase().includes(q) ||
           c.position.toLowerCase().includes(q) ||
+          (c.joiningAs ?? "").toLowerCase().includes(q) ||
+          c.location.toLowerCase().includes(q) ||
           c.mobile.toLowerCase().includes(q);
         const matchesStatus = statusFilter === "All" || c.status === statusFilter;
-        const matchesLoc = locationFilter === "All" || c.location === locationFilter;
-        return matchesSearch && matchesStatus && matchesLoc;
+        const matchesSite = siteFilter === "All" || (c.location ?? "").trim() === siteFilter;
+        const matchesDesig =
+          designationFilter === "All" || (c.position ?? "").trim() === designationFilter;
+        const appDate = (c.applicationDate ?? "").trim();
+        const matchesFrom = !fromDate || (appDate && appDate >= fromDate);
+        const matchesTo = !toDate || (appDate && appDate <= toDate);
+        return matchesSearch && matchesStatus && matchesSite && matchesDesig && matchesFrom && matchesTo;
       }),
-    [data.candidates, search, statusFilter, locationFilter],
+    [data.candidates, search, statusFilter, siteFilter, designationFilter, fromDate, toDate],
   );
+
+  const hasActiveFilters = Boolean(
+    search.trim() ||
+      statusFilter !== "All" ||
+      siteFilter !== "All" ||
+      designationFilter !== "All" ||
+      fromDate ||
+      toDate,
+  );
+
+  const resetFilters = () => {
+    setSearch("");
+    setStatusFilter("All");
+    setSiteFilter("All");
+    setDesignationFilter("All");
+    setFromDate("");
+    setToDate("");
+  };
 
   const handleSave = (payload: Omit<Candidate, "id">, editId?: string) => {
     if (editId) {
@@ -142,36 +188,77 @@ function RecruitmentPage() {
         <StatCard label="Rejected" value={counts.rejected} icon={XCircle} tone="danger" />
       </section>
 
-      <section className="acs-card p-5">
-        <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="flex flex-1 flex-col gap-2.5 sm:flex-row sm:items-center">
-            <div className="relative flex-1 sm:max-w-xs">
-              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search employee, mobile, designation..." className="pl-9" />
-            </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-40"><SelectValue placeholder="Status" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="All">All Statuses</SelectItem>
-                <SelectItem value="New">New</SelectItem>
-                <SelectItem value="Shortlisted">Shortlisted</SelectItem>
-                <SelectItem value="Selected">Selected</SelectItem>
-                <SelectItem value="Rejected">Rejected</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={locationFilter} onValueChange={setLocationFilter}>
-              <SelectTrigger className="w-full sm:w-56"><SelectValue placeholder="Location" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="All">All Locations</SelectItem>
-                {ACS_LOCATIONS.map((loc) => (
-                  <SelectItem key={loc} value={loc}>{loc}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+      <section className="acs-card p-5 space-y-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="relative flex-1 lg:max-w-sm">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              aria-label="Search recruitment"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search name, ID, mobile, designation, site..."
+              className="pl-9"
+            />
           </div>
-          <Button onClick={openNewFormPage}>
-            <Plus className="size-4" />Add Employee
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {hasActiveFilters && (
+              <Button variant="ghost" size="sm" onClick={resetFilters}>
+                <RotateCcw className="size-3.5" />
+                Reset Filters
+              </Button>
+            )}
+            <Button onClick={openNewFormPage}>
+              <Plus className="size-4" />Add Employee
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-5">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger aria-label="Filter by Status"><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">All Statuses</SelectItem>
+              <SelectItem value="New">New</SelectItem>
+              <SelectItem value="Shortlisted">Shortlisted</SelectItem>
+              <SelectItem value="Selected">Selected</SelectItem>
+              <SelectItem value="Rejected">Rejected</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={siteFilter} onValueChange={setSiteFilter}>
+            <SelectTrigger aria-label="Filter by Site"><SelectValue placeholder="All Sites" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">All Sites ({availableSites.length})</SelectItem>
+              {availableSites.map((siteName) => (
+                <SelectItem key={siteName} value={siteName}>{siteName}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={designationFilter} onValueChange={setDesignationFilter}>
+            <SelectTrigger aria-label="Filter by Designation"><SelectValue placeholder="All Designations" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">All Designations ({availableDesignations.length})</SelectItem>
+              {availableDesignations.map((desig) => (
+                <SelectItem key={desig} value={desig}>{desig}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Input
+            aria-label="Application From Date"
+            type="date"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+            title="From Application Date"
+          />
+          <Input
+            aria-label="Application To Date"
+            type="date"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+            title="To Application Date"
+          />
         </div>
 
         <div className="overflow-x-auto">
@@ -179,9 +266,10 @@ function RecruitmentPage() {
             <TableHeader>
               <TableRow className="acs-table-header hover:bg-transparent">
                 <TableHead>Employee / Applicant Name</TableHead>
+                <TableHead>Employee ID</TableHead>
                 <TableHead>Mobile Number</TableHead>
                 <TableHead>Designation</TableHead>
-                <TableHead>Site / Location</TableHead>
+                <TableHead>Site</TableHead>
                 <TableHead>Experience</TableHead>
                 <TableHead>Application Date</TableHead>
                 <TableHead>Status</TableHead>
@@ -191,12 +279,15 @@ function RecruitmentPage() {
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">No matching records found.</TableCell>
+                  <TableCell colSpan={9} className="py-10 text-center text-sm text-muted-foreground">No matching records found.</TableCell>
                 </TableRow>
               ) : (
                 filtered.map((cand) => (
                   <TableRow key={cand.id}>
                     <TableCell className="font-medium text-foreground">{cand.fullName}</TableCell>
+                    <TableCell className="whitespace-nowrap font-mono text-xs text-foreground">
+                      {cand.employeeId || <span className="text-muted-foreground">—</span>}
+                    </TableCell>
                     <TableCell className="whitespace-nowrap text-muted-foreground">{cand.mobile}</TableCell>
                     <TableCell className="text-foreground">{cand.position}</TableCell>
                     <TableCell className="max-w-[180px] truncate text-muted-foreground">{cand.location}</TableCell>
