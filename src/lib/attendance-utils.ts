@@ -175,7 +175,11 @@ export function deriveDynamicSites(data: AcsStoreData): string[] {
 function makeEmpKey(employeeId: string, employeeName: string): string {
   const cleanId = employeeId.trim().toUpperCase();
   const cleanName = employeeName.trim().toLowerCase();
-  return cleanId ? `id::${cleanId}` : `name::${cleanName}`;
+  return cleanId && !isSyntheticAttendanceId(cleanId) ? `id::${cleanId}` : `name::${cleanName}`;
+}
+
+export function isSyntheticAttendanceId(id: string): boolean {
+  return /^ACS\/(SITE|ATT)\//i.test(id.trim());
 }
 
 /**
@@ -189,21 +193,42 @@ export function deriveSiteEmployees(data: AcsStoreData, siteName: string): SiteE
     if (site.trim().toLowerCase() !== target) return;
     const cleanName = employeeName.trim();
     if (!cleanName) return;
-    const cleanId = employeeId.trim().toUpperCase();
-    const key = makeEmpKey(cleanId, cleanName);
+    const rawId = employeeId.trim().toUpperCase();
+    const realId = rawId && !isSyntheticAttendanceId(rawId) ? rawId : "";
+    const normName = cleanName.toLowerCase();
+    const key = makeEmpKey(realId, cleanName);
 
-    const existingByName = !cleanId
-      ? Array.from(map.values()).find(
-          (x) => x.employeeName.trim().toLowerCase() === cleanName.toLowerCase(),
-        )
-      : undefined;
-    if (existingByName) return;
+    // If incoming entry has no real ID (empty or temporary ACS/SITE/...), merge with any same-name employee at this site
+    if (!realId) {
+      const existingByName = Array.from(map.values()).find(
+        (x) => x.employeeName.trim().toLowerCase() === normName,
+      );
+      if (existingByName) {
+        if (!existingByName.designation && designation.trim()) {
+          existingByName.designation = designation.trim();
+        }
+        return;
+      }
+    } else {
+      // Incoming entry has a real ID: if an entry for the same name was previously registered without a real ID, upgrade it instead of adding a duplicate row
+      const noIdEntry = map.get(`name::${normName}`);
+      if (noIdEntry) {
+        map.delete(`name::${normName}`);
+        noIdEntry.key = key;
+        noIdEntry.employeeId = realId;
+        if (!noIdEntry.designation && designation.trim()) {
+          noIdEntry.designation = designation.trim();
+        }
+        map.set(key, noIdEntry);
+        return;
+      }
+    }
 
     const existing = map.get(key);
     if (!existing) {
       map.set(key, {
         key,
-        employeeId: cleanId,
+        employeeId: realId,
         employeeName: cleanName,
         designation: designation.trim() || "Security Guard",
         site: site.trim(),
@@ -212,8 +237,8 @@ export function deriveSiteEmployees(data: AcsStoreData, siteName: string): SiteE
       if (!existing.designation && designation.trim()) {
         existing.designation = designation.trim();
       }
-      if (!existing.employeeId && cleanId) {
-        existing.employeeId = cleanId;
+      if (!existing.employeeId && realId) {
+        existing.employeeId = realId;
       }
     }
   };

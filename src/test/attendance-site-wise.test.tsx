@@ -11,11 +11,13 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { AcsStoreProvider } from "@/lib/acs-store";
 import {
+  deriveSiteEmployees,
   getDaysInMonth,
   getRecordDutyCounts,
   parseAttendanceCsv,
   parseStatusOrCode,
 } from "@/lib/attendance-utils";
+import { INITIAL_ACS_DATA } from "@/lib/acs-seed";
 import { AuthProvider } from "@/lib/auth";
 import { Route as AttendanceRoute } from "@/routes/attendance";
 
@@ -71,6 +73,51 @@ describe("Attendance helpers and CSV parser", () => {
       normalDuty: 1,
       extraDuty: 1,
     });
+  });
+
+  it("never duplicates an employee when a no-ID candidate gets a synthetic attendance ID on quick mark", () => {
+    const roster = deriveSiteEmployees(
+      {
+        ...INITIAL_ACS_DATA,
+        candidates: [
+          {
+            id: "c-no-id",
+            employeeId: "",
+            fullName: "PARTH Roy",
+            mobile: "9876543210",
+            email: "",
+            position: "Lady Security Officer",
+            location: "TechPark Phase II, Bengaluru",
+            experience: "Fresher",
+            applicationDate: "2026-11-26",
+            status: "Selected",
+            resumeName: "",
+            remarks: "",
+          },
+        ],
+        attendance: [
+          {
+            id: "a-synth",
+            employeeId: "ACS/SITE/2026/PART",
+            employeeName: "PARTH Roy",
+            designation: "Lady Security Officer",
+            location: "TechPark Phase II, Bengaluru",
+            date: "2026-11-26",
+            checkIn: "08:00",
+            checkOut: "16:00",
+            workingHours: "8h 00m",
+            status: "Present",
+          },
+        ],
+        salaries: [],
+        statutory: [],
+      },
+      "TechPark Phase II, Bengaluru",
+    );
+
+    expect(roster).toHaveLength(1);
+    expect(roster[0]?.employeeName).toBe("PARTH Roy");
+    expect(roster[0]?.employeeId).toBe("");
   });
 });
 
