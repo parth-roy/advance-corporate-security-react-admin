@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/acs/StatusBadge";
 import { DocumentPreviewDialog } from "@/components/recruitment/DocumentPreviewDialog";
 import { useAcsStore } from "@/lib/acs-store";
 import type { Candidate, CandidateStatus, UploadedDocumentFile } from "@/lib/acs-types";
+import { useAuthorizedDocumentUrl } from "@/lib/document-url";
 import { formatINR } from "@/lib/acs-utils";
 import {
   ACADEMIC_LEVELS,
@@ -47,7 +48,7 @@ export function CandidateFullProfileView({
     return issue.employeeName.trim().toLowerCase() === candidate.fullName.trim().toLowerCase();
   });
 
-  const colorPhotoUrl = candidate.documents?.colorPhoto?.fileUrl;
+  const colorPhotoUrl = useAuthorizedDocumentUrl(candidate.documents?.colorPhoto?.fileUrl);
   const initials = candidate.fullName
     .split(/\s+/)
     .filter(Boolean)

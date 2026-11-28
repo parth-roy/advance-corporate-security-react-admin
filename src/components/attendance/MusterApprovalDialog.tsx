@@ -29,6 +29,7 @@ import type {
   UploadedDocumentFile,
 } from "@/lib/acs-types";
 import { formatMonthLabel, getLocalTodayIso } from "@/lib/attendance-utils";
+import { useAuthorizedDocumentUrl } from "@/lib/document-url";
 
 const STATUS_OPTIONS: { value: MusterVerificationStatus; label: string }[] = [
   { value: "DRAFT", label: "Draft (Site Supervisor Working Copy)" },
@@ -72,6 +73,7 @@ export function MusterApprovalDialog({
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const resolvedAttachmentUrl = useAuthorizedDocumentUrl(attachment?.fileUrl);
 
   useEffect(() => {
     if (!open) return;
@@ -315,12 +317,12 @@ export function MusterApprovalDialog({
                     {isPdf ? (
                       <iframe
                         title={attachment.fileName}
-                        src={attachment.fileUrl}
+                        src={resolvedAttachmentUrl || attachment.fileUrl}
                         className="h-56 w-full rounded"
                       />
                     ) : (
                       <img
-                        src={attachment.fileUrl}
+                        src={resolvedAttachmentUrl || attachment.fileUrl}
                         alt={attachment.fileName}
                         className="mx-auto max-h-56 rounded object-contain"
                       />

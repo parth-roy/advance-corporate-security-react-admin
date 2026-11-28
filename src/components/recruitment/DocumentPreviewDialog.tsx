@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { UploadedDocumentFile } from "@/lib/acs-types";
+import { useAuthorizedDocumentUrl } from "@/lib/document-url";
 
 function isImageFile(file: Partial<UploadedDocumentFile>): boolean {
   const mime = (file.mimeType ?? "").toLowerCase();
@@ -48,6 +49,8 @@ export function DocumentPreviewDialog({
   accept?: string;
 }) {
   const hasUrl = Boolean(file?.fileUrl);
+  const authorizedUrl = useAuthorizedDocumentUrl(file?.fileUrl);
+  const displayUrl = authorizedUrl || file?.fileUrl;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -76,15 +79,19 @@ export function DocumentPreviewDialog({
               <FileText className="mx-auto mb-2 size-8 text-muted-foreground/60" />
               No document file uploaded yet. Use the upload button below to attach one.
             </div>
+          ) : !displayUrl ? (
+            <div className="py-10 text-center text-xs text-muted-foreground">
+              Loading secure document preview...
+            </div>
           ) : isImageFile(file) ? (
             <img
-              src={file.fileUrl}
+              src={displayUrl}
               alt={file.fileName || title}
               className="max-h-[55vh] w-auto rounded object-contain"
             />
           ) : isPdfFile(file) ? (
             <iframe
-              src={file.fileUrl}
+              src={displayUrl}
               title={file.fileName || title}
               className="h-[55vh] w-full rounded border-0 bg-white"
             />
@@ -93,7 +100,7 @@ export function DocumentPreviewDialog({
               <FileText className="mx-auto size-8 text-primary" />
               <p className="font-semibold text-foreground">{file.fileName}</p>
               <a
-                href={file.fileUrl}
+                href={displayUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-primary hover:underline"
@@ -107,9 +114,9 @@ export function DocumentPreviewDialog({
 
         <DialogFooter className="flex-wrap gap-2 sm:justify-between">
           <div className="flex flex-wrap items-center gap-2">
-            {hasUrl && file?.fileUrl && (
+            {hasUrl && displayUrl && (
               <Button asChild type="button" variant="outline" size="sm">
-                <a href={file.fileUrl} target="_blank" rel="noopener noreferrer">
+                <a href={displayUrl} target="_blank" rel="noopener noreferrer">
                   <ExternalLink className="size-3.5" />
                   Open in New Tab
                 </a>
