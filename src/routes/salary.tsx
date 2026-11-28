@@ -183,7 +183,32 @@ function SalaryPage() {
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={handleExport}><Download className="size-4" />Export Payroll</Button>
                 <Button size="sm" onClick={handleGenerateAll}><Play className="size-4" />Generate Salary</Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  tooltip="Open site-wise Payroll Runs to auto-calculate wages from Attendance, Site Rules, Uniform EMIs & Advances"
+                  onClick={() => void navigate({ search: { tab: "runs" } })}
+                >
+                  Open Payroll Runs
+                </Button>
               </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3.5 py-2.5 text-xs text-muted-foreground">
+              <span>
+                <strong className="text-foreground">Note:</strong> Attendance-based monthly salary calculation
+                (Present, P/P, Half, NH, EPF, ESIC, Uniform EMIs &amp; Advances) happens inside{" "}
+                <strong className="text-foreground">Payroll Runs</strong> and automatically syncs Payslips &amp; Statutory.
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 px-2.5 text-xs"
+                onClick={() => void navigate({ search: { tab: "runs" } })}
+              >
+                Go to Payroll Runs
+              </Button>
             </div>
 
             <div className="overflow-x-auto">

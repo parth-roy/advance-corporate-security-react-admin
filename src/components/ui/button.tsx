@@ -2,6 +2,7 @@ import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 
+import { resolveButtonTooltip } from "@/lib/button-tooltips";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
@@ -34,13 +35,29 @@ const buttonVariants = cva(
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {
   asChild?: boolean;
+  /** Optional explicit hover tooltip description shown on pointer hover/focus. */
+  tooltip?: string;
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
+  ({ className, variant, size, asChild = false, tooltip, title, children, ...props }, ref) => {
     const Comp = asChild ? Slot : "button";
+    const resolvedTooltip = resolveButtonTooltip({
+      tooltip,
+      title,
+      ariaLabel: props["aria-label"],
+      children,
+    });
+
     return (
-      <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        data-tooltip={resolvedTooltip}
+        {...props}
+      >
+        {children}
+      </Comp>
     );
   },
 );

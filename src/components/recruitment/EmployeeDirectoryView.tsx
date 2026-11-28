@@ -3,6 +3,7 @@ import {
   Building2,
   ChevronLeft,
   ChevronRight,
+  Eye,
   Landmark,
   Pencil,
   Plus,
@@ -44,6 +45,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { StatCard } from "@/components/acs/StatCard";
 import { DesignationCombobox } from "@/components/recruitment/DesignationCombobox";
+import { EmployeeProfileDrawer } from "@/components/recruitment/EmployeeProfileDrawer";
 import { SiteCombobox } from "@/components/recruitment/SiteCombobox";
 import { type PaginatedEmployeesResult, useAcsStore } from "@/lib/acs-store";
 import type {
@@ -183,6 +185,7 @@ export function EmployeeDirectoryView() {
   });
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [viewing, setViewing] = useState<EmployeeRecord | null>(null);
   const [editing, setEditing] = useState<EmployeeRecord | null>(null);
   const [form, setForm] = useState<EmployeeFormState>(EMPTY_EMP_FORM);
   const [saving, setSaving] = useState(false);
@@ -506,7 +509,14 @@ export function EmployeeDirectoryView() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <div className="font-medium text-foreground">{emp.fullName}</div>
+                      <button
+                        type="button"
+                        data-tooltip={`Click to view ${emp.fullName}'s full profile, uniforms, attendance & payslips`}
+                        onClick={() => setViewing(emp)}
+                        className="text-left font-medium text-foreground underline-offset-2 hover:text-primary hover:underline"
+                      >
+                        {emp.fullName}
+                      </button>
                       <div className="text-xs text-muted-foreground">{emp.mobile || "No mobile"}</div>
                     </TableCell>
                     <TableCell>
@@ -544,6 +554,15 @@ export function EmployeeDirectoryView() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          aria-label={`View employee ${emp.fullName}`}
+                          tooltip={`View ${emp.fullName}'s full profile, assigned uniforms, attendance, advances, payslips & KYC docs`}
+                          onClick={() => setViewing(emp)}
+                        >
+                          <Eye className="size-4 text-primary" />
+                        </Button>
                         <Button
                           size="icon"
                           variant="ghost"
@@ -870,6 +889,15 @@ export function EmployeeDirectoryView() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <EmployeeProfileDrawer
+        employee={viewing}
+        onClose={() => setViewing(null)}
+        onEdit={(emp) => {
+          setViewing(null);
+          openEditDialog(emp);
+        }}
+      />
 
       <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>

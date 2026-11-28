@@ -13,6 +13,7 @@ import type { ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { Toaster } from "@/components/ui/sonner";
 import { AppShell } from "@/components/acs/AppShell";
+import { GlobalButtonTooltip } from "@/components/acs/GlobalButtonTooltip";
 import { LoginScreen } from "@/components/auth/LoginScreen";
 import { AcsStoreProvider } from "@/lib/acs-store";
 import { AuthProvider, useAuth } from "@/lib/auth";
@@ -162,6 +163,7 @@ function RootComponent() {
           </AcsStoreProvider>
         </AuthGate>
         <Toaster position="top-right" />
+        <GlobalButtonTooltip />
       </AuthProvider>
     </QueryClientProvider>
   );
