@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ArrowRight, Building2, CalendarDays, Clock, Download, MapPin, Plus, Search, Upload, UserCheck, Users } from "lucide-react";
 import { toast } from "sonner";
+import { StatusBadge } from "@/components/acs/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,14 +10,15 @@ import { StatCard } from "@/components/acs/StatCard";
 import { AttendanceFormDialog, AttendanceImportDialog } from "@/components/attendance/AttendanceDialogs";
 import { SiteAttendanceWorkspace } from "@/components/attendance/SiteAttendanceWorkspace";
 import { useAcsStore } from "@/lib/acs-store";
+import type { AttendanceSiteSummaryItem } from "@/lib/acs-types";
 import {
   deriveDynamicSites,
   deriveSiteEmployees,
   findRecordForEmployeeDate,
   formatMonthLabel,
   getCurrentYearMonth,
+  getExtendedDutyCounts,
   getLocalTodayIso,
-  getRecordDutyCounts,
 } from "@/lib/attendance-utils";
 import { downloadCsv } from "@/lib/acs-utils";
 
@@ -62,7 +64,15 @@ export const Route = createFileRoute("/attendance")({
 });
 
 function AttendancePage() {
-  const { data, upsertAttendance, upsertAttendanceBatch } = useAcsStore();
+  const {
+    data,
+    upsertAttendance,
+    upsertAttendanceBatch,
+    fetchAttendanceSiteSummary,
+  } = useAcsStore();
+  const fetchSummaryRef = useRef(fetchAttendanceSiteSummary);
+  fetchSummaryRef.current = fetchAttendanceSiteSummary;
+
   const { site, tab, date, month } = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
 
@@ -74,11 +84,42 @@ function AttendancePage() {
   const [siteSearch, setSiteSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [remoteSummaries, setRemoteSummaries] = useState<AttendanceSiteSummaryItem[] | null>(null);
+
+  useEffect(() => {
+    if (site) return;
+    let active = true;
+    void fetchSummaryRef.current(activeMonth, activeDate).then((rows) => {
+      if (active) setRemoteSummaries(rows);
+    });
+    return () => {
+      active = false;
+    };
+  }, [site, activeMonth, activeDate, data.attendance.length]);
 
   const sites = useMemo(() => deriveDynamicSites(data), [data]);
 
   const siteSummaries = useMemo(() => {
-    return sites.map((siteName) => {
+    const remoteMap = new Map<string, AttendanceSiteSummaryItem>();
+    (remoteSummaries ?? []).forEach((item) => {
+      if (item.siteName?.trim()) {
+        remoteMap.set(item.siteName.trim().toLowerCase(), item);
+      }
+    });
+
+    const allSiteNames = Array.from(
+      new Set([
+        ...sites,
+        ...(remoteSummaries ?? []).map((item) => item.siteName.trim()).filter(Boolean),
+      ]),
+    ).sort((a, b) => a.localeCompare(b));
+
+    return allSiteNames.map((siteName) => {
+      const remote = remoteMap.get(siteName.trim().toLowerCase());
+      if (remote && (remote.staffCount > 0 || remote.monthDuty > 0 || remote.verificationStatus !== "DRAFT")) {
+        return remote;
+      }
+
       const employees = deriveSiteEmployees(data, siteName);
       const dateRecords = data.attendance.filter(
         (a) =>
@@ -92,35 +133,58 @@ function AttendancePage() {
       employees.forEach((emp) => {
         const rec = findRecordForEmployeeDate(dateRecords, emp, activeDate);
         if (!rec) return;
-        if (rec.status === "Present") present += 1;
+        if (rec.status === "Present" || rec.status === "National Holiday") present += 1;
         else if (rec.status === "Double Duty") doubleDuty += 1;
         else if (rec.status === "Absent") absent += 1;
         else if (rec.status === "Half Day" || rec.status === "Leave") halfOrLeave += 1;
       });
       const unmarked = Math.max(0, employees.length - (present + doubleDuty + absent + halfOrLeave));
-      const monthDuty = data.attendance
+      let monthNormalDuty = 0;
+      let monthExtraDuty = 0;
+      let monthOtHours = 0;
+      let monthNhDays = 0;
+      data.attendance
         .filter(
           (a) =>
             a.date.startsWith(activeMonth) &&
             a.location.trim().toLowerCase() === siteName.trim().toLowerCase(),
         )
-        .reduce((sum, rec) => sum + getRecordDutyCounts(rec).totalDuty, 0);
+        .forEach((rec) => {
+          const c = getExtendedDutyCounts(rec);
+          monthNormalDuty += c.normalDuty;
+          monthExtraDuty += c.extraDuty;
+          monthOtHours += c.otHours;
+          monthNhDays += c.nhDays;
+        });
 
       return {
+        siteId: remote?.siteId ?? null,
+        siteCode: remote?.siteCode ?? "",
         siteName,
         staffCount: employees.length,
         present: present + doubleDuty,
         doubleDuty,
         absent,
         unmarked,
-        monthDuty: Number(monthDuty.toFixed(1)),
-      };
+        monthNormalDuty: Number(monthNormalDuty.toFixed(1)),
+        monthExtraDuty: Number(monthExtraDuty.toFixed(1)),
+        monthOtHours: Number(monthOtHours.toFixed(1)),
+        monthNhDays,
+        monthDuty: Number((monthNormalDuty + monthExtraDuty).toFixed(1)),
+        relieverCount: employees.filter((e) => e.isReliever).length,
+        verificationStatus: remote?.verificationStatus ?? "DRAFT",
+      } satisfies AttendanceSiteSummaryItem;
     });
-  }, [sites, data, activeDate, activeMonth]);
+  }, [sites, remoteSummaries, data, activeDate, activeMonth]);
 
   const filteredSiteSummaries = useMemo(() => {
     const q = siteSearch.trim().toLowerCase();
-    return siteSummaries.filter((s) => !q || s.siteName.toLowerCase().includes(q));
+    return siteSummaries.filter(
+      (s) =>
+        !q ||
+        s.siteName.toLowerCase().includes(q) ||
+        (s.siteCode ?? "").toLowerCase().includes(q),
+    );
   }, [siteSummaries, siteSearch]);
 
   const overallSummary = useMemo(() => {
@@ -128,12 +192,12 @@ function AttendancePage() {
     const presentToday = siteSummaries.reduce((sum, s) => sum + s.present, 0);
     const monthDuty = siteSummaries.reduce((sum, s) => sum + s.monthDuty, 0);
     return {
-      totalSites: sites.length,
+      totalSites: siteSummaries.length,
       totalStaff,
       presentToday,
       monthDuty: Number(monthDuty.toFixed(1)),
     };
-  }, [siteSummaries, sites.length]);
+  }, [siteSummaries]);
 
   const updateSearch = (patch: Partial<AttendanceSearch>) => {
     const next: AttendanceSearch = {
@@ -180,9 +244,25 @@ function AttendancePage() {
     const monthRecords = data.attendance.filter((a) => a.date.startsWith(activeMonth));
     downloadCsv(
       `acs-all-sites-attendance-${activeMonth}.csv`,
-      ["Site", "Employee ID", "Employee Name", "Designation", "Date", "Status", "Normal Duty", "Extra Duty", "Check-in", "Check-out", "Remarks"],
+      [
+        "Site",
+        "Employee ID",
+        "Employee Name",
+        "Designation",
+        "Date",
+        "Status",
+        "Normal Duty",
+        "Extra Duty",
+        "OT Hours",
+        "Reliever",
+        "Home Site",
+        "Adjustment Note",
+        "Check-in",
+        "Check-out",
+        "Remarks",
+      ],
       monthRecords.map((a) => {
-        const counts = getRecordDutyCounts(a);
+        const counts = getExtendedDutyCounts(a);
         return [
           a.location,
           a.employeeId,
@@ -192,6 +272,10 @@ function AttendancePage() {
           a.status,
           String(counts.normalDuty),
           String(counts.extraDuty),
+          String(counts.otHours),
+          a.isReliever ? "Yes" : "No",
+          a.primarySiteName ?? "",
+          a.adjustmentNote ?? "",
           a.checkIn,
           a.checkOut,
           a.remarks ?? "",
@@ -301,10 +385,22 @@ function AttendancePage() {
                   {item.doubleDuty > 0 && (
                     <Badge variant="info">{item.doubleDuty} P/P</Badge>
                   )}
+                  {item.monthNhDays > 0 && (
+                    <Badge variant="info">{item.monthNhDays} NH</Badge>
+                  )}
+                  {item.monthOtHours > 0 && (
+                    <Badge variant="warning">{item.monthOtHours}h OT</Badge>
+                  )}
+                  {item.relieverCount > 0 && (
+                    <Badge variant="info">{item.relieverCount} Reliever</Badge>
+                  )}
                   {item.absent > 0 && (
                     <Badge variant="danger">{item.absent} Absent</Badge>
                   )}
                   <Badge variant="neutral">{item.unmarked} Unmarked</Badge>
+                  {item.verificationStatus !== "DRAFT" && (
+                    <StatusBadge status={item.verificationStatus} />
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between border-t border-border pt-3 text-xs font-medium text-primary">

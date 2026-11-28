@@ -10,6 +10,8 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { AcsLogo } from "@/components/acs/AcsLogo";
 import { AdminProfileView } from "@/components/settings/AdminProfileView";
+import { OnboardingImportView } from "@/components/settings/OnboardingImportView";
+import { SiteMasterView } from "@/components/settings/SiteMasterView";
 import { cn } from "@/lib/utils";
 import { PAYROLL_MONTHS } from "@/lib/acs-seed";
 import { useAcsStore } from "@/lib/acs-store";
@@ -47,16 +49,25 @@ function ToggleSwitch({
   );
 }
 
+type SettingsTab = "profile" | "settings" | "sites" | "migration";
+
 export const Route = createFileRoute("/settings")({
-  validateSearch: (search: Record<string, unknown>): { tab: "profile" | "settings" } => ({
-    tab: search["tab"] === "profile" ? "profile" : "settings",
+  validateSearch: (search: Record<string, unknown>): { tab: SettingsTab } => ({
+    tab:
+      search["tab"] === "profile"
+        ? "profile"
+        : search["tab"] === "sites"
+          ? "sites"
+          : search["tab"] === "migration"
+            ? "migration"
+            : "settings",
   }),
   head: () => ({
     meta: [
-      { title: "Settings & Profile — ACS Admin Panel" },
-      { name: "description", content: "Manage administrator profile, Advance Corporate Security company details, logo, contact information, and basic preferences." },
-      { property: "og:title", content: "Settings & Profile — ACS Admin Panel" },
-      { property: "og:description", content: "Basic settings and administrator profile for ACS Admin Panel." },
+      { title: "Settings, Sites & Profile — ACS Admin Panel" },
+      { name: "description", content: "Manage administrator profile, client deployment sites, Advance Corporate Security company details, and preferences." },
+      { property: "og:title", content: "Settings, Sites & Profile — ACS Admin Panel" },
+      { property: "og:description", content: "Workspace settings, site master, and administrator profile for ACS Admin Panel." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -66,10 +77,49 @@ export const Route = createFileRoute("/settings")({
 
 function SettingsPage() {
   const { tab } = Route.useSearch();
+
   if (tab === "profile") {
     return <AdminProfileView />;
   }
-  return <WorkspaceSettingsView />;
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3">
+        <Button asChild size="sm" variant={tab === "settings" ? "default" : "outline"}>
+          <Link to="/settings" search={{ tab: "settings" }}>
+            <SlidersHorizontal className="size-3.5" />
+            Workspace Settings
+          </Link>
+        </Button>
+        <Button asChild size="sm" variant={tab === "sites" ? "default" : "outline"}>
+          <Link to="/settings" search={{ tab: "sites" }}>
+            <Building2 className="size-3.5" />
+            Client Sites &amp; Units
+          </Link>
+        </Button>
+        <Button asChild size="sm" variant={tab === "migration" ? "default" : "outline"}>
+          <Link to="/settings" search={{ tab: "migration" }}>
+            <Upload className="size-3.5" />
+            Bulk Import &amp; Migration
+          </Link>
+        </Button>
+        <Button asChild size="sm" variant="outline">
+          <Link to="/settings" search={{ tab: "profile" }}>
+            <UserCircle2 className="size-3.5" />
+            Admin Profile
+          </Link>
+        </Button>
+      </div>
+
+      {tab === "sites" ? (
+        <SiteMasterView />
+      ) : tab === "migration" ? (
+        <OnboardingImportView />
+      ) : (
+        <WorkspaceSettingsView />
+      )}
+    </div>
+  );
 }
 
 function WorkspaceSettingsView() {

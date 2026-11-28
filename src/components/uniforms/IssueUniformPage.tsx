@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Check, MapPin, Minus, Plus, Search, ShoppingBag, Trash2, User } from "lucide-react";
+import { ArrowLeft, Building2, CalendarClock, Check, MapPin, Minus, Plus, Search, ShoppingBag, Trash2, User } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/acs/StatusBadge";
 import { ACS_LOCATIONS, DEFAULT_UNIFORM_REGISTRATION_CHARGE, UNIFORM_CATEGORIES, UNIFORM_DEFAULT_PRICES } from "@/lib/acs-seed";
 import { useAcsStore } from "@/lib/acs-store";
-import type { UniformItem } from "@/lib/acs-types";
+import type { UniformIssueMode, UniformItem, UniformRecoveryMode } from "@/lib/acs-types";
 import { deriveUniformStatus, formatINR } from "@/lib/acs-utils";
 import { buildEmployeeId, inferDepartmentCode, parseEmployeeId } from "@/lib/employee-id";
 import { cn } from "@/lib/utils";
@@ -20,6 +20,9 @@ interface EmployeeOption {
   key: string;
   name: string;
   employeeId: string;
+  legacyEmpCode?: string;
+  mobile?: string;
+  originalDocHeld?: string;
   designation: string;
   site: string;
 }
@@ -43,16 +46,42 @@ export function IssueUniformPage({
 
   const employeeOptions = useMemo<EmployeeOption[]>(() => {
     const map = new Map<string, EmployeeOption>();
+    data.employees
+      .filter((e) => e.status !== "LEFT")
+      .forEach((e) => {
+        const empId = (e.empCode ?? "").trim();
+        const key = `${e.fullName.trim().toLowerCase()}::${empId.toLowerCase()}`;
+        const custody = e.originalIdCustody;
+        const origDoc = custody?.inCustody
+          ? `${custody.documentType || "Original ID"}${custody.referenceNo ? ` (${custody.referenceNo})` : ""}${custody.depositedDate ? ` · ${custody.depositedDate}` : ""}`
+          : "";
+        map.set(key, {
+          key,
+          name: e.fullName,
+          employeeId: empId,
+          ...(e.legacyEmpCode ? { legacyEmpCode: e.legacyEmpCode } : {}),
+          ...(e.mobile ? { mobile: e.mobile } : {}),
+          ...(origDoc ? { originalDocHeld: origDoc } : {}),
+          designation: e.designation,
+          site: e.siteName,
+        });
+      });
     data.candidates.forEach((c) => {
       const empId = (c.employeeId ?? "").trim();
+      const existingById = Array.from(map.values()).find(
+        (x) => empId && x.employeeId.toLowerCase() === empId.toLowerCase(),
+      );
+      if (existingById) return;
       const key = `${c.fullName.trim().toLowerCase()}::${empId.toLowerCase()}`;
-      map.set(key, {
-        key,
-        name: c.fullName,
-        employeeId: empId,
-        designation: c.position,
-        site: c.location,
-      });
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          name: c.fullName,
+          employeeId: empId,
+          designation: c.position,
+          site: c.location,
+        });
+      }
     });
     const mergeRecord = (name: string, empId: string, designation: string, site: string) => {
       const existingById = Array.from(map.values()).find(
@@ -68,23 +97,41 @@ export function IssueUniformPage({
     data.salaries.forEach((s) => mergeRecord(s.employeeName, s.employeeId, s.designation, s.location));
     data.statutory.forEach((st) => mergeRecord(st.employeeName, st.employeeId, st.designation, st.location));
     return Array.from(map.values());
-  }, [data.candidates, data.attendance, data.salaries, data.statutory]);
+  }, [data.employees, data.candidates, data.attendance, data.salaries, data.statutory]);
 
   const allSites = useMemo(() => {
-    const set = new Set<string>(ACS_LOCATIONS);
+    const set = new Set<string>();
+    data.sites.forEach((s) => s.isActive !== false && s.siteName && set.add(s.siteName));
+    data.employees.forEach((e) => e.siteName && set.add(e.siteName));
     data.candidates.forEach((c) => c.location && set.add(c.location));
     data.attendance.forEach((a) => a.location && set.add(a.location));
     data.salaries.forEach((s) => s.location && set.add(s.location));
-    return Array.from(set);
-  }, [data.candidates, data.attendance, data.salaries]);
+    if (set.size === 0) {
+      ACS_LOCATIONS.forEach((loc) => set.add(loc));
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [data.sites, data.employees, data.candidates, data.attendance, data.salaries]);
 
+  const [issueMode, setIssueMode] = useState<UniformIssueMode>("INDIVIDUAL");
+  const [serialNo, setSerialNo] = useState("");
   const [employeeName, setEmployeeName] = useState("");
   const [empDeptCode, setEmpDeptCode] = useState("SEC");
   const [empYear, setEmpYear] = useState(String(new Date().getFullYear()));
   const [empNumber, setEmpNumber] = useState("");
+  const [legacyEmpCode, setLegacyEmpCode] = useState("");
+  const [mobile, setMobile] = useState("");
   const [site, setSite] = useState("");
   const [issueDate, setIssueDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [issuedBy, setIssuedBy] = useState("");
+  const [receivedBy, setReceivedBy] = useState("");
+  const [verifiedBy, setVerifiedBy] = useState("");
+  const [originalDocHeld, setOriginalDocHeld] = useState("");
   const [remarks, setRemarks] = useState("");
+
+  const [recoveryMode, setRecoveryMode] = useState<UniformRecoveryMode>("ONE_TIME");
+  const [emiCount, setEmiCount] = useState("4");
+  const [fixedMonthlyAmt, setFixedMonthlyAmt] = useState("500");
+  const [recoveryStartMonth, setRecoveryStartMonth] = useState(() => new Date().toISOString().slice(0, 7));
 
   const [nameDropdownOpen, setNameDropdownOpen] = useState(false);
   const [idDropdownOpen, setIdDropdownOpen] = useState(false);
@@ -132,6 +179,10 @@ export function IssueUniformPage({
     setEmpDeptCode(parsed.deptCode || inferDepartmentCode(emp.designation));
     setEmpYear(parsed.year);
     setEmpNumber(parsed.number || emp.employeeId);
+    if (emp.legacyEmpCode) setLegacyEmpCode(emp.legacyEmpCode);
+    if (emp.mobile) setMobile(emp.mobile);
+    if (emp.originalDocHeld) setOriginalDocHeld(emp.originalDocHeld);
+    if (!receivedBy) setReceivedBy(emp.name);
     if (emp.site) setSite(emp.site);
     setNameDropdownOpen(false);
     setIdDropdownOpen(false);
@@ -228,7 +279,10 @@ export function IssueUniformPage({
 
   const cartLines = Object.values(cart);
   const itemsSubtotal = cartLines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
-  const numericRegCharge = includeRegCharge ? Math.max(0, Math.round(Number(regChargeAmount) || 0)) : 0;
+  const numericRegCharge =
+    issueMode === "INDIVIDUAL" && includeRegCharge
+      ? Math.max(0, Math.round(Number(regChargeAmount) || 0))
+      : 0;
   const grandTotal = itemsSubtotal + numericRegCharge;
 
   const formattedEmployeeId = buildEmployeeId({
@@ -237,18 +291,43 @@ export function IssueUniformPage({
     number: empNumber,
   });
 
+  const parsedEmiCount = Math.max(1, Math.min(36, Math.round(Number(emiCount) || 1)));
+  const parsedFixedMonthly = Math.max(1, Math.round(Number(fixedMonthlyAmt) || 500));
+  const emiPreviewAmount =
+    recoveryMode === "ONE_TIME"
+      ? grandTotal
+      : recoveryMode === "FIXED_MONTHLY"
+        ? Math.min(grandTotal, parsedFixedMonthly)
+        : Number((grandTotal / parsedEmiCount).toFixed(2));
+
+  const handleModeSwitch = (nextMode: UniformIssueMode) => {
+    setIssueMode(nextMode);
+    setError("");
+    if (nextMode === "BULK_SITE") {
+      setIncludeRegCharge(false);
+    } else {
+      setIncludeRegCharge(true);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
-    if (!employeeName.trim()) {
-      setError("Please select or enter an Employee Name.");
+    if (issueMode === "INDIVIDUAL") {
+      if (!employeeName.trim()) {
+        setError("Please select or enter an Employee Name.");
+        return;
+      }
+      if (!formattedEmployeeId) {
+        setError("Please enter the Employee ID number.");
+        return;
+      }
+    } else if (!receivedBy.trim() && !employeeName.trim()) {
+      setError("Please enter who received the bulk stock at site.");
       return;
     }
-    if (!formattedEmployeeId) {
-      setError("Please enter the Employee ID number.");
-      return;
-    }
+
     if (!site.trim()) {
       setError("Please select or enter a Site / Location.");
       return;
@@ -258,20 +337,46 @@ export function IssueUniformPage({
       return;
     }
 
+    const effectiveEmpId = issueMode === "BULK_SITE" ? "BULK-SITE" : formattedEmployeeId;
+    const effectiveEmpName =
+      issueMode === "BULK_SITE"
+        ? receivedBy.trim() || employeeName.trim() || `${site.trim()} Unit Stock`
+        : employeeName.trim();
+
     setSubmitting(true);
     try {
       const res = await issueUniformBatch({
-        employeeId: formattedEmployeeId,
-        employeeName: employeeName.trim(),
+        issueMode,
+        ...(serialNo.trim() ? { serialNo: serialNo.trim() } : {}),
+        employeeId: effectiveEmpId,
+        ...(legacyEmpCode.trim() ? { legacyEmpCode: legacyEmpCode.trim() } : {}),
+        employeeName: effectiveEmpName,
+        ...(mobile.trim() ? { mobile: mobile.trim() } : {}),
         site: site.trim(),
         issueDate,
         registrationCharge: numericRegCharge,
+        ...(issuedBy.trim() ? { issuedBy: issuedBy.trim() } : {}),
+        ...(receivedBy.trim() ? { receivedBy: receivedBy.trim() } : {}),
+        ...(verifiedBy.trim() ? { verifiedBy: verifiedBy.trim() } : {}),
+        ...(originalDocHeld.trim() ? { originalDocHeld: originalDocHeld.trim() } : {}),
+        billToSite: issueMode === "BULK_SITE",
         remarks: remarks.trim(),
         items: cartLines.map((line) => ({
           itemId: line.item.id,
           quantity: line.quantity,
           unitPrice: line.unitPrice,
         })),
+        recoveryPlan:
+          issueMode === "BULK_SITE"
+            ? { createPlan: false, recoveryMode: "NO_RECOVERY" }
+            : {
+                createPlan: recoveryMode !== "NO_RECOVERY" && grandTotal > 0,
+                recoveryMode,
+                installmentCount: parsedEmiCount,
+                monthlyAmount: emiPreviewAmount,
+                startMonth: recoveryStartMonth || issueDate.slice(0, 7),
+                remarks: remarks.trim(),
+              },
       });
 
       if (!res.ok) {
@@ -280,7 +385,9 @@ export function IssueUniformPage({
       }
 
       toast.success(
-        `Issued ${cartLines.length} item(s) to ${employeeName.trim()} (${formattedEmployeeId}).`,
+        issueMode === "BULK_SITE"
+          ? `Bulk issued ${cartLines.length} item line(s) to ${site.trim()}.`
+          : `Issued ${cartLines.length} item(s) to ${effectiveEmpName} (${effectiveEmpId}).`,
       );
       onIssuedSuccess();
     } finally {
@@ -303,120 +410,158 @@ export function IssueUniformPage({
       <form onSubmit={(e) => void handleSubmit(e)} className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         <div className="space-y-6 lg:col-span-8">
           <section className="acs-card p-5 space-y-4">
-            <div>
-              <h2 className="text-sm font-semibold text-foreground">1. Employee &amp; Deployment Site</h2>
-              <p className="text-xs text-muted-foreground">
-                Search employee by name or ID ({`ACS/<DEPT>/<YEAR>/<NUMBER>`}), and select deployment site
-              </p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">
+                  1. {issueMode === "BULK_SITE" ? "Bulk Site / Unit Stock Issue" : "Employee & Deployment Site"}
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                  {issueMode === "BULK_SITE"
+                    ? "Issue bulk uniform kits directly to a client site (PHED mode — no employee salary deduction)."
+                    : `Search employee by name or ID (ACS/<DEPT>/<YEAR>/<NUMBER>), and select deployment site`}
+                </p>
+              </div>
+              <div className="inline-flex rounded-lg border bg-muted/40 p-1">
+                <button
+                  type="button"
+                  onClick={() => handleModeSwitch("INDIVIDUAL")}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                    issueMode === "INDIVIDUAL"
+                      ? "bg-background text-foreground shadow-xs"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <User className="size-3.5" />
+                  Individual Employee
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleModeSwitch("BULK_SITE")}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                    issueMode === "BULK_SITE"
+                      ? "bg-background text-foreground shadow-xs"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <Building2 className="size-3.5" />
+                  Bulk Site Issue
+                </button>
+              </div>
             </div>
             <Separator />
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div ref={nameRef} className="relative space-y-1.5">
-                <Label htmlFor="iss-emp-name">Employee Name *</Label>
-                <div className="relative">
-                  <User className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="iss-emp-name"
-                    aria-label="Search Employee Name"
-                    value={employeeName}
-                    onFocus={() => setNameDropdownOpen(true)}
-                    onChange={(e) => {
-                      setEmployeeName(e.target.value);
-                      setNameDropdownOpen(true);
-                    }}
-                    placeholder="Search employee name..."
-                    className="pl-9"
-                  />
-                </div>
-                {nameDropdownOpen && (
-                  <div className="absolute z-40 mt-1 max-h-60 w-full overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
-                    {filteredEmployeesByName.length === 0 ? (
-                      <p className="px-2.5 py-2 text-xs text-muted-foreground">
-                        No matching employees — using typed name directly.
-                      </p>
-                    ) : (
-                      filteredEmployeesByName.map((emp) => (
-                        <button
-                          key={emp.key}
-                          type="button"
-                          onClick={() => selectEmployee(emp)}
-                          className="flex w-full flex-col rounded px-2.5 py-1.5 text-left text-xs hover:bg-accent"
-                        >
-                          <span className="font-semibold text-foreground">{emp.name}</span>
-                          <span className="text-[11px] text-muted-foreground">
-                            {emp.employeeId || "No ID assigned"} · {emp.designation}
-                            {emp.site ? ` · ${emp.site}` : ""}
-                          </span>
-                        </button>
-                      ))
+              {issueMode === "INDIVIDUAL" && (
+                <>
+                  <div ref={nameRef} className="relative space-y-1.5">
+                    <Label htmlFor="iss-emp-name">Employee Name *</Label>
+                    <div className="relative">
+                      <User className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        id="iss-emp-name"
+                        aria-label="Search Employee Name"
+                        value={employeeName}
+                        onFocus={() => setNameDropdownOpen(true)}
+                        onChange={(e) => {
+                          setEmployeeName(e.target.value);
+                          setNameDropdownOpen(true);
+                        }}
+                        placeholder="Search employee name..."
+                        className="pl-9"
+                      />
+                    </div>
+                    {nameDropdownOpen && (
+                      <div className="absolute z-40 mt-1 max-h-60 w-full overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
+                        {filteredEmployeesByName.length === 0 ? (
+                          <p className="px-2.5 py-2 text-xs text-muted-foreground">
+                            No matching employees — using typed name directly.
+                          </p>
+                        ) : (
+                          filteredEmployeesByName.map((emp) => (
+                            <button
+                              key={emp.key}
+                              type="button"
+                              onClick={() => selectEmployee(emp)}
+                              className="flex w-full flex-col rounded px-2.5 py-1.5 text-left text-xs hover:bg-accent"
+                            >
+                              <span className="font-semibold text-foreground">{emp.name}</span>
+                              <span className="text-[11px] text-muted-foreground">
+                                {emp.employeeId || "No ID assigned"} · {emp.designation}
+                                {emp.site ? ` · ${emp.site}` : ""}
+                              </span>
+                            </button>
+                          ))
+                        )}
+                      </div>
                     )}
                   </div>
-                )}
-              </div>
 
-              <div ref={idRef} className="relative space-y-1.5">
-                <Label htmlFor="iss-emp-num">Employee ID (ACS / Dept / Year / Number) *</Label>
-                <div className="flex items-center gap-1">
-                  <span className="flex h-9 items-center rounded-md border border-input bg-muted px-2 text-xs font-semibold">
-                    ACS
-                  </span>
-                  <span className="text-muted-foreground">/</span>
-                  <Input
-                    aria-label="Issue Employee Dept Code"
-                    value={empDeptCode}
-                    onChange={(e) => setEmpDeptCode(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 8))}
-                    placeholder="CLE"
-                    className="w-16 text-center text-xs font-semibold uppercase"
-                  />
-                  <span className="text-muted-foreground">/</span>
-                  <Input
-                    aria-label="Issue Employee Year"
-                    value={empYear}
-                    onChange={(e) => setEmpYear(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                    placeholder="2026"
-                    className="w-16 text-center text-xs tabular-nums"
-                  />
-                  <span className="text-muted-foreground">/</span>
-                  <Input
-                    id="iss-emp-num"
-                    aria-label="Search Employee ID Number"
-                    value={empNumber}
-                    onFocus={() => setIdDropdownOpen(true)}
-                    onChange={(e) => {
-                      setEmpNumber(e.target.value.toUpperCase());
-                      setIdDropdownOpen(true);
-                    }}
-                    placeholder="Search or enter no."
-                    className="min-w-0 flex-1 text-xs uppercase"
-                  />
-                </div>
-                {idDropdownOpen && (
-                  <div className="absolute z-40 mt-1 max-h-56 w-full overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
-                    {filteredEmployeesById.length === 0 ? (
-                      <p className="px-2.5 py-2 text-xs text-muted-foreground">
-                        Using custom ID: {formattedEmployeeId || "Enter number"}
-                      </p>
-                    ) : (
-                      filteredEmployeesById.map((emp) => (
-                        <button
-                          key={`id-${emp.key}`}
-                          type="button"
-                          onClick={() => selectEmployee(emp)}
-                          className="flex w-full items-center justify-between rounded px-2.5 py-1.5 text-left text-xs hover:bg-accent"
-                        >
-                          <span className="font-mono font-semibold text-foreground">
-                            {emp.employeeId || "No ID"}
-                          </span>
-                          <span className="truncate pl-2 text-[11px] text-muted-foreground">
-                            {emp.name}
-                          </span>
-                        </button>
-                      ))
+                  <div ref={idRef} className="relative space-y-1.5">
+                    <Label htmlFor="iss-emp-num">Employee ID (ACS / Dept / Year / Number) *</Label>
+                    <div className="flex items-center gap-1">
+                      <span className="flex h-9 items-center rounded-md border border-input bg-muted px-2 text-xs font-semibold">
+                        ACS
+                      </span>
+                      <span className="text-muted-foreground">/</span>
+                      <Input
+                        aria-label="Issue Employee Dept Code"
+                        value={empDeptCode}
+                        onChange={(e) => setEmpDeptCode(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 8))}
+                        placeholder="CLE"
+                        className="w-16 text-center text-xs font-semibold uppercase"
+                      />
+                      <span className="text-muted-foreground">/</span>
+                      <Input
+                        aria-label="Issue Employee Year"
+                        value={empYear}
+                        onChange={(e) => setEmpYear(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                        placeholder="2026"
+                        className="w-16 text-center text-xs tabular-nums"
+                      />
+                      <span className="text-muted-foreground">/</span>
+                      <Input
+                        id="iss-emp-num"
+                        aria-label="Search Employee ID Number"
+                        value={empNumber}
+                        onFocus={() => setIdDropdownOpen(true)}
+                        onChange={(e) => {
+                          setEmpNumber(e.target.value.toUpperCase());
+                          setIdDropdownOpen(true);
+                        }}
+                        placeholder="Search or enter no."
+                        className="min-w-0 flex-1 text-xs uppercase"
+                      />
+                    </div>
+                    {idDropdownOpen && (
+                      <div className="absolute z-40 mt-1 max-h-56 w-full overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
+                        {filteredEmployeesById.length === 0 ? (
+                          <p className="px-2.5 py-2 text-xs text-muted-foreground">
+                            Using custom ID: {formattedEmployeeId || "Enter number"}
+                          </p>
+                        ) : (
+                          filteredEmployeesById.map((emp) => (
+                            <button
+                              key={`id-${emp.key}`}
+                              type="button"
+                              onClick={() => selectEmployee(emp)}
+                              className="flex w-full items-center justify-between rounded px-2.5 py-1.5 text-left text-xs hover:bg-accent"
+                            >
+                              <span className="font-mono font-semibold text-foreground">
+                                {emp.employeeId || "No ID"}
+                              </span>
+                              <span className="truncate pl-2 text-[11px] text-muted-foreground">
+                                {emp.name}
+                              </span>
+                            </button>
+                          ))
+                        )}
+                      </div>
                     )}
                   </div>
-                )}
-              </div>
+                </>
+              )}
 
               <div ref={siteRef} className="relative space-y-1.5">
                 <Label htmlFor="iss-site">Site / Location *</Label>
@@ -476,10 +621,91 @@ export function IssueUniformPage({
                     id="iss-remarks"
                     value={remarks}
                     onChange={(e) => setRemarks(e.target.value)}
-                    placeholder="e.g. Initial onboarding kit"
+                    placeholder={issueMode === "BULK_SITE" ? "e.g. 10 Nos Shoe & 16 Nos Belt Received" : "e.g. Initial onboarding kit"}
                   />
                 </div>
               </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 rounded-lg border bg-muted/20 p-3 sm:grid-cols-3 lg:grid-cols-6">
+              <div className="space-y-1">
+                <Label htmlFor="iss-serial" className="text-[11px]">Serial No</Label>
+                <Input
+                  id="iss-serial"
+                  value={serialNo}
+                  onChange={(e) => setSerialNo(e.target.value)}
+                  placeholder="e.g. 454"
+                  className="h-8 text-xs"
+                />
+              </div>
+              {issueMode === "INDIVIDUAL" && (
+                <div className="space-y-1">
+                  <Label htmlFor="iss-legacy" className="text-[11px]">Legacy Code</Label>
+                  <Input
+                    id="iss-legacy"
+                    value={legacyEmpCode}
+                    onChange={(e) => setLegacyEmpCode(e.target.value)}
+                    placeholder="e.g. 3065"
+                    className="h-8 text-xs"
+                  />
+                </div>
+              )}
+              <div className="space-y-1">
+                <Label htmlFor="iss-mobile" className="text-[11px]">Mobile No</Label>
+                <Input
+                  id="iss-mobile"
+                  value={mobile}
+                  onChange={(e) => setMobile(e.target.value)}
+                  placeholder="10-digit mobile"
+                  className="h-8 text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="iss-by" className="text-[11px]">Issued By</Label>
+                <Input
+                  id="iss-by"
+                  value={issuedBy}
+                  onChange={(e) => setIssuedBy(e.target.value)}
+                  placeholder="Store / Ops staff"
+                  className="h-8 text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="iss-rec-by" className="text-[11px]">
+                  {issueMode === "BULK_SITE" ? "Received By *" : "Received By"}
+                </Label>
+                <Input
+                  id="iss-rec-by"
+                  value={receivedBy}
+                  onChange={(e) => setReceivedBy(e.target.value)}
+                  placeholder={issueMode === "BULK_SITE" ? "Site Supervisor / Officer" : "Recipient signature"}
+                  className="h-8 text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="iss-ver-by" className="text-[11px]">Verified By</Label>
+                <Input
+                  id="iss-ver-by"
+                  value={verifiedBy}
+                  onChange={(e) => setVerifiedBy(e.target.value)}
+                  placeholder="Manager / Admin"
+                  className="h-8 text-xs"
+                />
+              </div>
+              {issueMode === "INDIVIDUAL" && (
+                <div className="col-span-2 space-y-1 sm:col-span-3 lg:col-span-6">
+                  <Label htmlFor="iss-orig-doc" className="text-[11px]">
+                    Original ID / Custody Tag (Register Reference)
+                  </Label>
+                  <Input
+                    id="iss-orig-doc"
+                    value={originalDocHeld}
+                    onChange={(e) => setOriginalDocHeld(e.target.value)}
+                    placeholder="e.g. ORIGINAL VOTER ID: 22/08/- or Aadhaar Copy Verified"
+                    className="h-8 text-xs"
+                  />
+                </div>
+              )}
             </div>
           </section>
 
@@ -677,46 +903,132 @@ export function IssueUniformPage({
             <Separator />
 
             <div className="space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-foreground">
-                  <Checkbox
-                    checked={includeRegCharge}
-                    onCheckedChange={(v) => setIncludeRegCharge(v === true)}
+              {issueMode === "INDIVIDUAL" && (
+                <div className="flex items-center justify-between gap-2">
+                  <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-foreground">
+                    <Checkbox
+                      checked={includeRegCharge}
+                      onCheckedChange={(v) => setIncludeRegCharge(v === true)}
+                    />
+                    Uniform Registration Charge
+                  </label>
+                  <Input
+                    aria-label="Registration Charge Amount"
+                    type="number"
+                    min={0}
+                    disabled={!includeRegCharge}
+                    value={regChargeAmount}
+                    onChange={(e) => setRegChargeAmount(e.target.value)}
+                    className="h-7 w-24 text-right text-xs tabular-nums"
                   />
-                  Uniform Registration Charge
-                </label>
-                <Input
-                  aria-label="Registration Charge Amount"
-                  type="number"
-                  min={0}
-                  disabled={!includeRegCharge}
-                  value={regChargeAmount}
-                  onChange={(e) => setRegChargeAmount(e.target.value)}
-                  className="h-7 w-24 text-right text-xs tabular-nums"
-                />
-              </div>
+                </div>
+              )}
 
               <div className="space-y-1.5 rounded-lg border bg-background p-3 text-xs">
                 <div className="flex justify-between text-muted-foreground">
                   <span>Items Subtotal</span>
                   <span className="tabular-nums text-foreground">{formatINR(itemsSubtotal)}</span>
                 </div>
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Registration Charge</span>
-                  <span className="tabular-nums text-foreground">{formatINR(numericRegCharge)}</span>
-                </div>
+                {issueMode === "INDIVIDUAL" && (
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Registration Charge</span>
+                    <span className="tabular-nums text-foreground">{formatINR(numericRegCharge)}</span>
+                  </div>
+                )}
                 <Separator className="my-1" />
                 <div className="flex justify-between text-sm font-bold text-foreground">
                   <span>Total Charge</span>
                   <span className="tabular-nums">{formatINR(grandTotal)}</span>
                 </div>
               </div>
+
+              {issueMode === "INDIVIDUAL" ? (
+                <div className="space-y-2.5 rounded-lg border bg-muted/20 p-3">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                    <CalendarClock className="size-3.5 text-primary" />
+                    <span>Payroll EMI Recovery Schedule</span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <Label htmlFor="iss-rec-mode" className="text-[11px]">Recovery Mode</Label>
+                      <Select
+                        value={recoveryMode}
+                        onValueChange={(v) => setRecoveryMode(v as UniformRecoveryMode)}
+                      >
+                        <SelectTrigger id="iss-rec-mode" className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ONE_TIME">One-Time (Next Salary)</SelectItem>
+                          <SelectItem value="EMI_COUNT">Split into EMIs (N Months)</SelectItem>
+                          <SelectItem value="FIXED_MONTHLY">Fixed Monthly ₹</SelectItem>
+                          <SelectItem value="NO_RECOVERY">Paid Cash / No Deduction</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {recoveryMode !== "NO_RECOVERY" && (
+                      <div className="space-y-1">
+                        <Label htmlFor="iss-rec-month" className="text-[11px]">Start Month</Label>
+                        <Input
+                          id="iss-rec-month"
+                          type="month"
+                          value={recoveryStartMonth}
+                          onChange={(e) => setRecoveryStartMonth(e.target.value)}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                    )}
+                    {recoveryMode === "EMI_COUNT" && (
+                      <div className="col-span-full space-y-1">
+                        <Label htmlFor="iss-emi-count" className="text-[11px]">Number of Installments</Label>
+                        <Input
+                          id="iss-emi-count"
+                          type="number"
+                          min={1}
+                          max={36}
+                          value={emiCount}
+                          onChange={(e) => setEmiCount(e.target.value)}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                    )}
+                    {recoveryMode === "FIXED_MONTHLY" && (
+                      <div className="col-span-full space-y-1">
+                        <Label htmlFor="iss-emi-fixed" className="text-[11px]">Monthly Deduction (₹)</Label>
+                        <Input
+                          id="iss-emi-fixed"
+                          type="number"
+                          min={1}
+                          value={fixedMonthlyAmt}
+                          onChange={(e) => setFixedMonthlyAmt(e.target.value)}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    {recoveryMode === "NO_RECOVERY"
+                      ? "No salary recovery plan will be created."
+                      : recoveryMode === "ONE_TIME"
+                        ? `Full recovery scheduled starting ${recoveryStartMonth}.`
+                        : `${parsedEmiCount} EMI(s) @ ${formatINR(emiPreviewAmount)}/month from ${recoveryStartMonth}.`}
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-lg border bg-info-soft/40 p-2.5 text-[11px] text-foreground">
+                  Bulk Site Mode deducts inventory from ACS stock for site deployment with zero individual employee salary deduction.
+                </div>
+              )}
             </div>
 
             {error && <p className="text-xs font-medium text-danger">{error}</p>}
 
             <Button type="submit" className="w-full" disabled={submitting}>
-              {submitting ? "Issuing Uniform Kit..." : "Confirm & Issue Uniform Kit"}
+              {submitting
+                ? "Issuing..."
+                : issueMode === "BULK_SITE"
+                  ? "Confirm Bulk Site Issue"
+                  : "Confirm & Issue Uniform Kit"}
             </Button>
           </div>
         </aside>

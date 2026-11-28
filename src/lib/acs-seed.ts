@@ -35,7 +35,7 @@ export const UNIFORM_DEFAULT_PRICES: Record<UniformCategory, number> = {
   Pant: 460,
   Belt: 120,
   Shoe: 480,
-  Badge: 0,
+  Badge: 70,
   Cap: 120,
   "Lanyard + Whistle": 90,
   "Safety Shoe": 570,
@@ -178,6 +178,8 @@ export const ACS_IDENTIFICATION_MARK_GROUPS: { group: string; marks: string[] }[
 ];
 
 export const INITIAL_ACS_DATA: AcsStoreData = {
+  sites: [],
+  employees: [],
   candidates: [
     { id: "c1", fullName: "Vikram Singh Rathore", mobile: "+91 98451 22310", email: "vikram.rathore@mail.in", position: "Senior Security Officer", location: "TechPark Phase II, Bengaluru", experience: "5 Years", applicationDate: "2026-11-23", status: "Shortlisted", resumeName: "Vikram_Rathore_CV.pdf", remarks: "Ex-serviceman with corporate campus access control experience." },
     { id: "c2", fullName: "Arjun Kumar Verma", mobile: "+91 98114 77621", email: "arjun.verma@mail.in", position: "Security Guard", location: "CyberHub Tower B, Gurugram", experience: "3 Years", applicationDate: "2026-11-24", status: "New", resumeName: "Arjun_Verma_Resume.pdf", remarks: "Available for rotational night shifts immediately." },
@@ -196,7 +198,7 @@ export const INITIAL_ACS_DATA: AcsStoreData = {
     { id: "u6", name: "Blue Pant", category: "Pant", subCategory: "Blue Pant", size: "32", unitPrice: 460, availableQty: 50, issuedQty: 0, lastUpdated: "2026-11-26" },
     { id: "u7", name: "Belt", category: "Belt", subCategory: "", size: "Free", unitPrice: 120, availableQty: 60, issuedQty: 0, lastUpdated: "2026-11-26" },
     { id: "u8", name: "Shoe", category: "Shoe", subCategory: "", size: "8", unitPrice: 480, availableQty: 40, issuedQty: 0, lastUpdated: "2026-11-26" },
-    { id: "u9", name: "Badge", category: "Badge", subCategory: "", size: "Std", unitPrice: 0, availableQty: 100, issuedQty: 0, lastUpdated: "2026-11-26" },
+    { id: "u9", name: "Badge", category: "Badge", subCategory: "", size: "Std", unitPrice: 70, availableQty: 100, issuedQty: 0, lastUpdated: "2026-11-26" },
     { id: "u10", name: "Cap", category: "Cap", subCategory: "", size: "Free", unitPrice: 120, availableQty: 60, issuedQty: 0, lastUpdated: "2026-11-26" },
     { id: "u11", name: "Lanyard + Whistle", category: "Lanyard + Whistle", subCategory: "", size: "Std", unitPrice: 90, availableQty: 80, issuedQty: 0, lastUpdated: "2026-11-26" },
     { id: "u12", name: "Safety Shoe", category: "Safety Shoe", subCategory: "", size: "8", unitPrice: 570, availableQty: 30, issuedQty: 0, lastUpdated: "2026-11-26" },
@@ -211,6 +213,7 @@ export const INITIAL_ACS_DATA: AcsStoreData = {
     { id: "ui3", batchId: "batch-3", employeeId: "ACS/SEC/2026/004", employeeName: "Prakash Nair", site: "HITEC Corporate Park, Hyderabad", itemId: "u14", itemName: "Jacket", category: "Jacket", subCategory: "", size: "XL", quantity: 1, unitPrice: 550, registrationCharge: 0, totalAmount: 550, issueDate: "2026-11-18", status: "Issued" },
     { id: "ui4", batchId: "batch-4", employeeId: "ACS/SEC/2026/003", employeeName: "Anita Pawar", site: "BKC Financial Plaza, Mumbai", itemId: "u2", itemName: "Blue Shirt", category: "Shirt", subCategory: "Blue Shirt", size: "L", quantity: 2, unitPrice: 450, registrationCharge: 0, totalAmount: 900, issueDate: "2026-10-05", returnDate: "2026-11-10", status: "Returned" },
   ],
+  uniformRecoveryPlans: [],
   stockLogs: [
     { id: "sl1", itemName: "Black Shirt", action: "Restocked", quantity: 30, date: "2026-11-24", note: "Quarterly vendor replenishment PO-882" },
     { id: "sl2", itemName: "Jacket", action: "Issued", quantity: 1, date: "2026-11-18", note: "Issued to Prakash Nair (ACS/SEC/2026/004)" },
@@ -290,6 +293,11 @@ export const INITIAL_ACS_DATA: AcsStoreData = {
     { id: "sal5", employeeId: "ACS-1005", employeeName: "Manoj Tiwari", designation: "Security Guard", department: "Site Security", category: "Security Personnel", location: "DLF IT SEZ, Noida", month: "November 2026", year: "2026", basicSalary: 14800, allowances: 2800, overtime: 0, otherEarnings: 400, pfDeduction: 1776, esiDeduction: 132, otherDeductions: 200, status: "Pending" },
     { id: "sal6", employeeId: "ACS-1006", employeeName: "Kiran Gowda", designation: "Senior Guard", department: "Site Security", category: "Security Personnel", location: "TechPark Phase II, Bengaluru", month: "November 2026", year: "2026", basicSalary: 16800, allowances: 3400, overtime: 1500, otherEarnings: 500, pfDeduction: 1800, esiDeduction: 148, otherDeductions: 200, status: "Processed" },
   ],
+  salaryAdvances: [],
+  vouchers: [],
+  salaryRuleProfiles: [],
+  payrollRuns: [],
+  billingRuleProfiles: [],
   payslips: [
     { id: "ps1", payslipId: "PS-2026-11-1001", employeeId: "ACS-1001", employeeName: "Ramesh Kulkarni", designation: "Site Supervisor", department: "Field Operations", location: "TechPark Phase II, Bengaluru", salaryMonth: "November 2026", basicSalary: 22000, allowances: 5200, overtime: 1800, otherEarnings: 1000, pfDeduction: 1800, esiDeduction: 0, otherDeductions: 400, generatedDate: "2026-11-24", status: "Generated" },
     { id: "ps2", payslipId: "PS-2026-11-1003", employeeId: "ACS-1003", employeeName: "Anita Pawar", designation: "Lady Security Officer", department: "Corporate Access", location: "BKC Financial Plaza, Mumbai", salaryMonth: "November 2026", basicSalary: 17500, allowances: 3600, overtime: 1200, otherEarnings: 700, pfDeduction: 1800, esiDeduction: 155, otherDeductions: 250, generatedDate: "2026-11-24", status: "Generated" },

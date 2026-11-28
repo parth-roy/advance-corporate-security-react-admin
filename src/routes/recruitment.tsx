@@ -19,22 +19,34 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { StatCard } from "@/components/acs/StatCard";
 import { StatusBadge } from "@/components/acs/StatusBadge";
 import { CandidateDrawer } from "@/components/recruitment/CandidateDrawer";
+import { CandidateFullProfileView } from "@/components/recruitment/CandidateFullProfileView";
+import { DeployCandidateDialog } from "@/components/recruitment/DeployCandidateDialog";
+import { EmployeeDirectoryView } from "@/components/recruitment/EmployeeDirectoryView";
 import { EmploymentApplicationForm } from "@/components/recruitment/EmploymentApplicationForm";
 import { useAcsStore } from "@/lib/acs-store";
 import type { Candidate, CandidateStatus } from "@/lib/acs-types";
 
 interface RecruitmentSearch {
-  mode?: "new" | "edit";
+  mode?: "new" | "edit" | "view";
   id?: string;
+  tab?: "pipeline" | "employees";
 }
 
 export const Route = createFileRoute("/recruitment")({
   validateSearch: (search: Record<string, unknown>): RecruitmentSearch => {
-    const mode = search["mode"] === "new" || search["mode"] === "edit" ? search["mode"] : undefined;
+    const mode =
+      search["mode"] === "new" || search["mode"] === "edit" || search["mode"] === "view"
+        ? search["mode"]
+        : undefined;
     const id = typeof search["id"] === "string" && search["id"].trim() ? search["id"] : undefined;
+    const tab =
+      search["tab"] === "employees" || search["tab"] === "pipeline"
+        ? search["tab"]
+        : undefined;
     return {
       ...(mode ? { mode } : {}),
       ...(id ? { id } : {}),
+      ...(tab ? { tab } : {}),
     };
   },
   head: () => ({
@@ -52,7 +64,8 @@ export const Route = createFileRoute("/recruitment")({
 
 function RecruitmentPage() {
   const { data, addCandidate, updateCandidate, deleteCandidate } = useAcsStore();
-  const { mode, id } = Route.useSearch();
+  const { mode, id, tab } = Route.useSearch();
+  const activeTab = tab ?? "pipeline";
   const navigate = useNavigate({ from: Route.fullPath });
 
   const [search, setSearch] = useState("");
@@ -62,6 +75,7 @@ function RecruitmentPage() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [viewing, setViewing] = useState<Candidate | null>(null);
+  const [deployTarget, setDeployTarget] = useState<Candidate | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Candidate | null>(null);
 
   const availableSites = useMemo(() => {
@@ -165,6 +179,27 @@ function RecruitmentPage() {
     void navigate({ search: {} });
   };
 
+  if (mode === "view" && id) {
+    const viewingCandidate = data.candidates.find((c) => c.id === id) ?? null;
+    if (viewingCandidate) {
+      return (
+        <>
+          <CandidateFullProfileView
+            candidate={viewingCandidate}
+            onBack={closeFormPage}
+            onEdit={openEditFormPage}
+            onStatusChange={handleStatusChange}
+            onDeploy={(cand) => setDeployTarget(cand)}
+          />
+          <DeployCandidateDialog
+            candidate={deployTarget}
+            onClose={() => setDeployTarget(null)}
+          />
+        </>
+      );
+    }
+  }
+
   if (mode === "new" || mode === "edit") {
     const editingCandidate =
       mode === "edit" && id ? data.candidates.find((c) => c.id === id) ?? null : null;
@@ -180,6 +215,33 @@ function RecruitmentPage() {
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant={activeTab === "pipeline" ? "default" : "outline"}
+            onClick={() => void navigate({ to: "/recruitment", search: { tab: "pipeline" } })}
+          >
+            <UserPlus className="size-3.5" />
+            Recruitment Pipeline ({data.candidates.length})
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={activeTab === "employees" ? "default" : "outline"}
+            onClick={() => void navigate({ to: "/recruitment", search: { tab: "employees" } })}
+          >
+            <Users className="size-3.5" />
+            Employee Directory ({data.employees.length})
+          </Button>
+        </div>
+      </div>
+
+      {activeTab === "employees" ? (
+        <EmployeeDirectoryView />
+      ) : (
+        <>
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard label="Total Applicants" value={counts.total} icon={Users} tone="primary" />
         <StatCard label="New Applications" value={counts.newApps} icon={UserPlus} tone="info" />
@@ -296,6 +358,15 @@ function RecruitmentPage() {
                     <TableCell><StatusBadge status={cand.status} /></TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title={cand.convertedEmployeeObjectId ? "Update site deployment" : "Deploy as Employee"}
+                          aria-label={`Deploy ${cand.fullName} as employee`}
+                          onClick={() => setDeployTarget(cand)}
+                        >
+                          <UserCheck className="size-4 text-primary" />
+                        </Button>
                         <Button size="icon" variant="ghost" aria-label={`View ${cand.fullName}`} onClick={() => setViewing(cand)}><Eye className="size-4" /></Button>
                         <Button size="icon" variant="ghost" aria-label={`Edit ${cand.fullName}`} onClick={() => openEditFormPage(cand)}><Pencil className="size-4" /></Button>
                         <Button size="icon" variant="ghost" aria-label={`Delete ${cand.fullName}`} onClick={() => setDeleteTarget(cand)}><Trash2 className="size-4 text-danger" /></Button>
@@ -309,7 +380,25 @@ function RecruitmentPage() {
         </div>
       </section>
 
-      <CandidateDrawer candidate={viewing} onClose={() => setViewing(null)} onEdit={openEditFormPage} onStatusChange={handleStatusChange} />
+      <CandidateDrawer
+        candidate={viewing}
+        onClose={() => setViewing(null)}
+        onEdit={openEditFormPage}
+        onStatusChange={handleStatusChange}
+        onDeploy={(cand) => {
+          setViewing(null);
+          setDeployTarget(cand);
+        }}
+        onViewFullScreen={(cand) => {
+          setViewing(null);
+          void navigate({ search: { mode: "view", id: cand.id } });
+        }}
+      />
+
+      <DeployCandidateDialog
+        candidate={deployTarget}
+        onClose={() => setDeployTarget(null)}
+      />
 
       <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
@@ -325,6 +414,8 @@ function RecruitmentPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+        </>
+      )}
     </div>
   );
 }

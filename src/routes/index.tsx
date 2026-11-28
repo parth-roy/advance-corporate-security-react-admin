@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/acs/StatusBadge";
 import { AttendanceChart } from "@/components/dashboard/AttendanceChart";
 import { QuickEmployeeDialog } from "@/components/dashboard/QuickEmployeeDialog";
 import { useAcsStore } from "@/lib/acs-store";
+import { deriveDynamicSites } from "@/lib/attendance-utils";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -27,13 +28,20 @@ function DashboardPage() {
   const { data } = useAcsStore();
   const [empDialogOpen, setEmpDialogOpen] = useState(false);
 
-  const totalEmployees = data.attendance.length;
-  const activeEmployees = data.attendance.filter((a) => a.status !== "Absent").length;
+  const activeSitesCount = deriveDynamicSites(data).length;
+  const activeDirectoryEmployees = data.employees.filter((e) => e.status === "ACTIVE").length;
+  const totalEmployees = data.employees.length > 0 ? activeDirectoryEmployees : data.attendance.length;
+  const activeEmployees =
+    data.employees.length > 0
+      ? data.employees.filter((e) => e.status === "ACTIVE" || e.status === "ON_HOLD").length
+      : data.attendance.filter((a) => a.status !== "Absent").length;
   const presentCount = data.attendance.filter((a) => a.status === "Present").length;
   const absentCount = data.attendance.filter((a) => a.status === "Absent").length;
   const onLeaveCount = data.attendance.filter((a) => a.status === "Leave").length;
   const halfDayCount = data.attendance.filter((a) => a.status === "Half Day").length;
-  const attendanceRate = totalEmployees > 0 ? Math.round(((presentCount + halfDayCount) / totalEmployees) * 100) : 0;
+  const attendanceDenominator = data.attendance.length;
+  const attendanceRate =
+    attendanceDenominator > 0 ? Math.round(((presentCount + halfDayCount) / attendanceDenominator) * 100) : 0;
 
   const activeRecruitment = data.candidates.filter((c) => c.status === "New" || c.status === "Shortlisted").length;
   const pendingSalaries = data.salaries.filter((s) => s.status === "Pending").length;
@@ -42,7 +50,13 @@ function DashboardPage() {
   return (
     <div className="space-y-6">
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <StatCard label="Total Employees" value={totalEmployees} hint="Across 5 active client sites" icon={Users} tone="primary" />
+        <StatCard
+          label="Total Employees"
+          value={totalEmployees}
+          hint={`Across ${activeSitesCount} active client site${activeSitesCount === 1 ? "" : "s"}`}
+          icon={Users}
+          tone="primary"
+        />
         <StatCard label="Active Employees" value={activeEmployees} hint="On duty or scheduled shifts" icon={UserCheck} tone="success" />
         <StatCard label="Today's Attendance" value={`${attendanceRate}%`} hint={`${presentCount} present · ${halfDayCount} half day`} icon={CalendarCheck2} tone="info" />
         <StatCard label="Active Recruitment" value={activeRecruitment} hint={`${data.candidates.length} total applicants`} icon={UserPlus} tone="info" />

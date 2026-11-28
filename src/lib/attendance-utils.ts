@@ -1,4 +1,4 @@
-import type { AcsStoreData, AttendanceRecord, AttendanceStatus } from "./acs-types";
+import type { AcsStoreData, AttendanceDutyType, AttendanceRecord, AttendanceStatus } from "./acs-types";
 
 export interface SiteEmployeeSummary {
   key: string;
@@ -6,6 +6,8 @@ export interface SiteEmployeeSummary {
   employeeName: string;
   designation: string;
   site: string;
+  isReliever?: boolean;
+  primarySiteName?: string;
 }
 
 export interface AttendanceStatusMeta {
@@ -20,6 +22,7 @@ export const ATTENDANCE_STATUS_META: readonly AttendanceStatusMeta[] = [
   { status: "Present", code: "P", shortLabel: "Present (1 Duty)", normalDuty: 1, extraDuty: 0 },
   { status: "Double Duty", code: "P/P", shortLabel: "Double / Extra Duty (2 Duties)", normalDuty: 1, extraDuty: 1 },
   { status: "Half Day", code: "H", shortLabel: "Half Day (0.5 Duty)", normalDuty: 0.5, extraDuty: 0 },
+  { status: "National Holiday", code: "NH", shortLabel: "National Holiday (NH)", normalDuty: 1, extraDuty: 0 },
   { status: "Absent", code: "A", shortLabel: "Absent (0 Duty)", normalDuty: 0, extraDuty: 0 },
   { status: "Leave", code: "L", shortLabel: "Leave (0 Duty)", normalDuty: 0, extraDuty: 0 },
   { status: "Weekly Off", code: "WO", shortLabel: "Weekly Off", normalDuty: 0, extraDuty: 0 },
@@ -89,6 +92,7 @@ export function getDefaultDutyForStatus(status: AttendanceStatus): {
 } {
   switch (status) {
     case "Present":
+    case "National Holiday":
       return { normalDuty: 1, extraDuty: 0, checkIn: "08:00", checkOut: "16:00", workingHours: "8h 00m" };
     case "Double Duty":
       return { normalDuty: 1, extraDuty: 1, checkIn: "08:00", checkOut: "24:00", workingHours: "16h 00m" };
@@ -120,6 +124,46 @@ export function getRecordDutyCounts(record: Pick<AttendanceRecord, "status" | "n
   };
 }
 
+export function getExtendedDutyCounts(
+  record: Pick<
+    AttendanceRecord,
+    "status" | "normalDuty" | "extraDuty" | "otHours" | "otDayEquivalent" | "shiftFraction"
+  >,
+): {
+  normalDuty: number;
+  extraDuty: number;
+  otHours: number;
+  otDayEquivalent: number;
+  nhDays: number;
+  shiftFraction: number;
+  totalDuty: number;
+} {
+  const base = getRecordDutyCounts(record);
+  const otHours =
+    typeof record.otHours === "number" && Number.isFinite(record.otHours)
+      ? Math.max(0, record.otHours)
+      : 0;
+  const otDayEquivalent =
+    typeof record.otDayEquivalent === "number" && Number.isFinite(record.otDayEquivalent)
+      ? Math.max(0, record.otDayEquivalent)
+      : otHours > 0
+        ? Number((otHours / 8).toFixed(3))
+        : base.extraDuty;
+  const shiftFraction =
+    typeof record.shiftFraction === "number" && Number.isFinite(record.shiftFraction)
+      ? Math.max(0, record.shiftFraction)
+      : base.normalDuty;
+  const nhDays = record.status === "National Holiday" ? 1 : 0;
+
+  return {
+    ...base,
+    otHours: Number(otHours.toFixed(2)),
+    otDayEquivalent: Number(otDayEquivalent.toFixed(3)),
+    nhDays,
+    shiftFraction: Number(shiftFraction.toFixed(3)),
+  };
+}
+
 export function parseStatusOrCode(raw: string): AttendanceStatus | null {
   const norm = raw.trim().toLowerCase();
   if (!norm || norm === "-" || norm === "—" || norm === ".") return null;
@@ -138,10 +182,74 @@ export function parseStatusOrCode(raw: string): AttendanceStatus | null {
   if (norm === "h" || norm === "hd" || norm === "half" || norm === "half day" || norm === "0.5") {
     return "Half Day";
   }
+  if (norm === "nh" || norm === "national holiday" || norm === "holiday") {
+    return "National Holiday";
+  }
   if (norm === "a" || norm === "absent" || norm === "0") return "Absent";
   if (norm === "l" || norm === "leave") return "Leave";
   if (norm === "wo" || norm === "w/o" || norm === "weekly off" || norm === "off") return "Weekly Off";
+  const numVal = Number(norm);
+  if (Number.isFinite(numVal) && numVal > 0 && numVal <= 3) {
+    if (numVal > 1) return "Double Duty";
+    if (numVal <= 0.5) return "Half Day";
+    return "Present";
+  }
   return null;
+}
+
+export function parseAttendanceCellValue(raw: string): {
+  status: AttendanceStatus;
+  dutyType: AttendanceDutyType;
+  normalDuty: number;
+  extraDuty: number;
+  shiftFraction: number;
+} | null {
+  const norm = raw.trim().toLowerCase();
+  const status = parseStatusOrCode(raw);
+  if (!status) return null;
+
+  const numVal = Number(norm);
+  const isCustomFraction =
+    norm !== "" &&
+    Number.isFinite(numVal) &&
+    numVal > 0 &&
+    numVal <= 3 &&
+    numVal !== 1 &&
+    numVal !== 2 &&
+    numVal !== 0.5;
+
+  if (isCustomFraction) {
+    const rounded = Number(numVal.toFixed(3));
+    const normalDuty = Math.min(1, rounded);
+    const extraDuty = Math.max(0, Number((rounded - 1).toFixed(3)));
+    return {
+      status,
+      dutyType: "CUSTOM",
+      normalDuty,
+      extraDuty,
+      shiftFraction: rounded,
+    };
+  }
+
+  const defaults = getDefaultDutyForStatus(status);
+  const code = statusToCode(status);
+  const dutyType: AttendanceDutyType =
+    code === "P" ||
+    code === "P/P" ||
+    code === "H" ||
+    code === "NH" ||
+    code === "A" ||
+    code === "L" ||
+    code === "WO"
+      ? code
+      : "P";
+  return {
+    status,
+    dutyType,
+    normalDuty: defaults.normalDuty,
+    extraDuty: defaults.extraDuty,
+    shiftFraction: defaults.normalDuty,
+  };
 }
 
 /**
@@ -149,6 +257,16 @@ export function parseStatusOrCode(raw: string): AttendanceStatus | null {
  */
 export function deriveDynamicSites(data: AcsStoreData): string[] {
   const sites = new Set<string>();
+  data.sites.forEach((s) => {
+    if (s.isActive !== false && s.siteName.trim()) {
+      sites.add(s.siteName.trim());
+    }
+  });
+  data.employees.forEach((e) => {
+    if (e.status !== "LEFT" && e.siteName.trim()) {
+      sites.add(e.siteName.trim());
+    }
+  });
   data.candidates.forEach((c) => {
     const loc = (c.location ?? "").trim();
     if (loc) sites.add(loc);
@@ -188,8 +306,20 @@ export function isSyntheticAttendanceId(id: string): boolean {
 export function deriveSiteEmployees(data: AcsStoreData, siteName: string): SiteEmployeeSummary[] {
   const target = siteName.trim().toLowerCase();
   const map = new Map<string, SiteEmployeeSummary>();
+  const homeSiteByEmpKey = new Map<string, string>();
+  data.employees.forEach((e) => {
+    if (e.status !== "LEFT" && e.siteName.trim()) {
+      homeSiteByEmpKey.set(makeEmpKey(e.empCode, e.fullName), e.siteName.trim());
+    }
+  });
 
-  const register = (employeeId: string, employeeName: string, designation: string, site: string) => {
+  const register = (
+    employeeId: string,
+    employeeName: string,
+    designation: string,
+    site: string,
+    relieverMeta?: { isReliever?: boolean; primarySiteName?: string },
+  ) => {
     if (site.trim().toLowerCase() !== target) return;
     const cleanName = employeeName.trim();
     if (!cleanName) return;
@@ -197,6 +327,10 @@ export function deriveSiteEmployees(data: AcsStoreData, siteName: string): SiteE
     const realId = rawId && !isSyntheticAttendanceId(rawId) ? rawId : "";
     const normName = cleanName.toLowerCase();
     const key = makeEmpKey(realId, cleanName);
+    const knownHomeSite = homeSiteByEmpKey.get(key) || relieverMeta?.primarySiteName || "";
+    const resolvedIsReliever =
+      Boolean(relieverMeta?.isReliever) ||
+      Boolean(knownHomeSite && knownHomeSite.trim().toLowerCase() !== target);
 
     // If incoming entry has no real ID (empty or temporary ACS/SITE/...), merge with any same-name employee at this site
     if (!realId) {
@@ -206,6 +340,10 @@ export function deriveSiteEmployees(data: AcsStoreData, siteName: string): SiteE
       if (existingByName) {
         if (!existingByName.designation && designation.trim()) {
           existingByName.designation = designation.trim();
+        }
+        if (resolvedIsReliever && !existingByName.isReliever) {
+          existingByName.isReliever = true;
+          if (knownHomeSite) existingByName.primarySiteName = knownHomeSite;
         }
         return;
       }
@@ -218,6 +356,10 @@ export function deriveSiteEmployees(data: AcsStoreData, siteName: string): SiteE
         noIdEntry.employeeId = realId;
         if (!noIdEntry.designation && designation.trim()) {
           noIdEntry.designation = designation.trim();
+        }
+        if (resolvedIsReliever && !noIdEntry.isReliever) {
+          noIdEntry.isReliever = true;
+          if (knownHomeSite) noIdEntry.primarySiteName = knownHomeSite;
         }
         map.set(key, noIdEntry);
         return;
@@ -232,6 +374,8 @@ export function deriveSiteEmployees(data: AcsStoreData, siteName: string): SiteE
         employeeName: cleanName,
         designation: designation.trim() || "Security Guard",
         site: site.trim(),
+        ...(resolvedIsReliever ? { isReliever: true } : {}),
+        ...(resolvedIsReliever && knownHomeSite ? { primarySiteName: knownHomeSite } : {}),
       });
     } else {
       if (!existing.designation && designation.trim()) {
@@ -240,14 +384,26 @@ export function deriveSiteEmployees(data: AcsStoreData, siteName: string): SiteE
       if (!existing.employeeId && realId) {
         existing.employeeId = realId;
       }
+      if (resolvedIsReliever && !existing.isReliever) {
+        existing.isReliever = true;
+        if (knownHomeSite) existing.primarySiteName = knownHomeSite;
+      }
     }
   };
 
+  data.employees.forEach((e) => {
+    if (e.status !== "LEFT") {
+      register(e.empCode, e.fullName, e.designation, e.siteName);
+    }
+  });
   data.candidates.forEach((c) => {
     register(c.employeeId ?? "", c.fullName, c.joiningAs || c.position, c.location);
   });
   data.attendance.forEach((a) => {
-    register(a.employeeId, a.employeeName, a.designation, a.location);
+    register(a.employeeId, a.employeeName, a.designation, a.location, {
+      ...(a.isReliever !== undefined ? { isReliever: a.isReliever } : {}),
+      ...(a.primarySiteName ? { primarySiteName: a.primarySiteName } : {}),
+    });
   });
   data.salaries.forEach((s) => {
     register(s.employeeId, s.employeeName, s.designation, s.location);
@@ -256,7 +412,10 @@ export function deriveSiteEmployees(data: AcsStoreData, siteName: string): SiteE
     register(st.employeeId, st.employeeName, st.designation, st.location);
   });
 
-  return Array.from(map.values()).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
+  return Array.from(map.values()).sort((a, b) => {
+    if (Boolean(a.isReliever) !== Boolean(b.isReliever)) return a.isReliever ? 1 : -1;
+    return a.employeeName.localeCompare(b.employeeName);
+  });
 }
 
 export function findRecordForEmployeeDate(
@@ -270,12 +429,10 @@ export function findRecordForEmployeeDate(
 
   return records.find((r) => {
     if (r.date !== date) return false;
+    if (targetSite && r.location.trim().toLowerCase() !== targetSite) return false;
     const recId = r.employeeId.trim().toUpperCase();
     if (targetId && recId && targetId === recId) return true;
-    return (
-      r.employeeName.trim().toLowerCase() === targetName &&
-      r.location.trim().toLowerCase() === targetSite
-    );
+    return r.employeeName.trim().toLowerCase() === targetName;
   });
 }
 
@@ -350,6 +507,8 @@ export function parseAttendanceCsv(
   const inIdx = findCol("checkin", "intime");
   const outIdx = findCol("checkout", "outtime");
   const hrsIdx = findCol("workinghours", "hours");
+  const otIdx = findCol("othours", "othrs", "overtimehours");
+  const adjIdx = findCol("adjustment", "adjust");
   const remarksIdx = findCol("remarks", "note");
 
   if (nameIdx < 0) {
@@ -370,6 +529,7 @@ export function parseAttendanceCsv(
       `ACS/IMP/${fallbackMonth.slice(0, 4)}/${String(rowIdx).padStart(3, "0")}`;
     const desig = (desigIdx >= 0 ? cols[desigIdx] : "") || "Security Guard";
     const rowSite = (siteIdx >= 0 ? cols[siteIdx] : "") || fallbackSite;
+    const rowAdj = adjIdx >= 0 ? (cols[adjIdx] ?? "").trim() : "";
 
     if (!rowSite.trim()) {
       errors.push(`Row ${rowIdx + 1}: Missing site / unit.`);
@@ -377,13 +537,13 @@ export function parseAttendanceCsv(
     }
 
     if (dayCols.length >= 2) {
-      // Monthly 1..31 register format
+      // Monthly 1..31 register format (supports P, P/P, NH, H, A, L, WO, and fractional days like 0.5, 0.75, 0.333)
       for (const dc of dayCols) {
         if (dc.day > daysLimit) continue;
         const cellVal = cols[dc.index] ?? "";
-        const status = parseStatusOrCode(cellVal);
-        if (!status) continue;
-        const defaults = getDefaultDutyForStatus(status);
+        const parsed = parseAttendanceCellValue(cellVal);
+        if (!parsed) continue;
+        const defaults = getDefaultDutyForStatus(parsed.status);
         records.push({
           employeeId: empId.trim().toUpperCase(),
           employeeName: empName.trim(),
@@ -393,22 +553,27 @@ export function parseAttendanceCsv(
           checkIn: defaults.checkIn,
           checkOut: defaults.checkOut,
           workingHours: defaults.workingHours,
-          status,
-          normalDuty: defaults.normalDuty,
-          extraDuty: defaults.extraDuty,
+          status: parsed.status,
+          dutyType: parsed.dutyType,
+          shiftFraction: parsed.shiftFraction,
+          normalDuty: parsed.normalDuty,
+          extraDuty: parsed.extraDuty,
+          ...(rowAdj ? { adjustmentNote: rowAdj } : {}),
           remarks: remarksIdx >= 0 ? (cols[remarksIdx] ?? "") : "",
         });
       }
     } else {
       // Daily row format
       const rawStatus = statusIdx >= 0 ? (cols[statusIdx] ?? "") : "Present";
-      const status = parseStatusOrCode(rawStatus);
-      if (!status) {
+      const parsed = parseAttendanceCellValue(rawStatus);
+      if (!parsed) {
         errors.push(`Row ${rowIdx + 1} (${empName}): Invalid status "${rawStatus}".`);
         continue;
       }
-      const defaults = getDefaultDutyForStatus(status);
+      const defaults = getDefaultDutyForStatus(parsed.status);
       const rowDate = (dateIdx >= 0 ? cols[dateIdx] : "") || fallbackDate;
+      const otHours = otIdx >= 0 ? Math.max(0, Number(cols[otIdx] ?? 0) || 0) : 0;
+      const otDayEquivalent = otHours > 0 ? Number((otHours / 8).toFixed(3)) : 0;
       records.push({
         employeeId: empId.trim().toUpperCase(),
         employeeName: empName.trim(),
@@ -418,9 +583,13 @@ export function parseAttendanceCsv(
         checkIn: (inIdx >= 0 ? cols[inIdx] : "") || defaults.checkIn,
         checkOut: (outIdx >= 0 ? cols[outIdx] : "") || defaults.checkOut,
         workingHours: (hrsIdx >= 0 ? cols[hrsIdx] : "") || defaults.workingHours,
-        status,
-        normalDuty: defaults.normalDuty,
-        extraDuty: defaults.extraDuty,
+        status: parsed.status,
+        dutyType: parsed.dutyType,
+        shiftFraction: parsed.shiftFraction,
+        normalDuty: parsed.normalDuty,
+        extraDuty: parsed.extraDuty,
+        ...(otHours > 0 ? { otHours, otDayEquivalent } : {}),
+        ...(rowAdj ? { adjustmentNote: rowAdj } : {}),
         remarks: remarksIdx >= 0 ? (cols[remarksIdx] ?? "") : "",
       });
     }

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Download, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +22,7 @@ const STATUSES: AttendanceStatus[] = [
   "Present",
   "Double Duty",
   "Half Day",
+  "National Holiday",
   "Absent",
   "Leave",
   "Weekly Off",
@@ -56,6 +58,11 @@ export function AttendanceFormDialog({
   const [status, setStatus] = useState<AttendanceStatus>("Present");
   const [normalDuty, setNormalDuty] = useState("1");
   const [extraDuty, setExtraDuty] = useState("0");
+  const [otHours, setOtHours] = useState("0");
+  const [shiftFraction, setShiftFraction] = useState("1");
+  const [isReliever, setIsReliever] = useState(false);
+  const [primarySiteName, setPrimarySiteName] = useState("");
+  const [adjustmentNote, setAdjustmentNote] = useState("");
   const [remarks, setRemarks] = useState("");
   const [error, setError] = useState("");
 
@@ -73,6 +80,11 @@ export function AttendanceFormDialog({
       const defaults = getDefaultDutyForStatus(editing.status);
       setNormalDuty(String(editing.normalDuty ?? defaults.normalDuty));
       setExtraDuty(String(editing.extraDuty ?? defaults.extraDuty));
+      setOtHours(String(editing.otHours ?? 0));
+      setShiftFraction(String(editing.shiftFraction ?? editing.normalDuty ?? defaults.normalDuty));
+      setIsReliever(Boolean(editing.isReliever));
+      setPrimarySiteName(editing.primarySiteName ?? "");
+      setAdjustmentNote(editing.adjustmentNote ?? "");
       setRemarks(editing.remarks ?? "");
     } else {
       setEmployeeId("");
@@ -86,6 +98,11 @@ export function AttendanceFormDialog({
       setWorkingHours("8h 00m");
       setNormalDuty("1");
       setExtraDuty("0");
+      setOtHours("0");
+      setShiftFraction("1");
+      setIsReliever(false);
+      setPrimarySiteName("");
+      setAdjustmentNote("");
       setRemarks("");
     }
     setError("");
@@ -99,6 +116,7 @@ export function AttendanceFormDialog({
     setWorkingHours(defaults.workingHours);
     setNormalDuty(String(defaults.normalDuty));
     setExtraDuty(String(defaults.extraDuty));
+    setShiftFraction(String(defaults.normalDuty));
   };
 
   const handlePickExistingEmployee = (empKey: string) => {
@@ -108,6 +126,8 @@ export function AttendanceFormDialog({
     setEmployeeName(chosen.employeeName);
     setDesignation(chosen.designation);
     if (chosen.site) setLocation(chosen.site);
+    setIsReliever(Boolean(chosen.isReliever));
+    setPrimarySiteName(chosen.primarySiteName ?? "");
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -120,8 +140,28 @@ export function AttendanceFormDialog({
       employeeId.trim().toUpperCase() ||
       `ACS/ATT/${date.slice(0, 4)}/${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
     const isOff = status === "Absent" || status === "Leave" || status === "Weekly Off";
-    const parsedNormal = Math.max(0, Math.min(2, Number(normalDuty) || 0));
-    const parsedExtra = Math.max(0, Math.min(2, Number(extraDuty) || 0));
+    const parsedNormal = Math.max(0, Math.min(3, Number(normalDuty) || 0));
+    const parsedExtra = Math.max(0, Math.min(3, Number(extraDuty) || 0));
+    const parsedOt = Math.max(0, Math.min(24, Number(otHours) || 0));
+    const parsedFraction = Math.max(0, Math.min(3, Number(shiftFraction) || parsedNormal));
+    const otEq = parsedOt > 0 ? Number((parsedOt / 8).toFixed(3)) : parsedExtra;
+    const defaults = getDefaultDutyForStatus(status);
+    const dutyType =
+      parsedFraction !== defaults.normalDuty
+        ? "CUSTOM"
+        : status === "Double Duty"
+          ? "P/P"
+          : status === "Half Day"
+            ? "H"
+            : status === "National Holiday"
+              ? "NH"
+              : status === "Absent"
+                ? "A"
+                : status === "Leave"
+                  ? "L"
+                  : status === "Weekly Off"
+                    ? "WO"
+                    : "P";
 
     onSave(
       {
@@ -134,8 +174,15 @@ export function AttendanceFormDialog({
         checkOut: isOff ? "—" : checkOut.trim() || "16:00",
         workingHours: isOff ? "0h 00m" : workingHours.trim() || "8h 00m",
         status,
+        dutyType,
+        shiftFraction: parsedFraction,
         normalDuty: parsedNormal,
         extraDuty: parsedExtra,
+        otHours: parsedOt,
+        otDayEquivalent: otEq,
+        isReliever,
+        ...(primarySiteName.trim() ? { primarySiteName: primarySiteName.trim() } : {}),
+        ...(adjustmentNote.trim() ? { adjustmentNote: adjustmentNote.trim() } : {}),
         remarks: remarks.trim(),
       },
       editing?.id,
@@ -232,7 +279,11 @@ export function AttendanceFormDialog({
                 <SelectContent>
                   {STATUSES.map((s) => (
                     <SelectItem key={s} value={s}>
-                      {s === "Double Duty" ? "Double Duty (P/P)" : s}
+                      {s === "Double Duty"
+                        ? "Double Duty (P/P)"
+                        : s === "National Holiday"
+                          ? "National Holiday (NH)"
+                          : s}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -240,7 +291,7 @@ export function AttendanceFormDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label htmlFor="att-in">Check-in</Label>
               <Input id="att-in" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} />
@@ -258,11 +309,14 @@ export function AttendanceFormDialog({
               <Input
                 id="att-norm"
                 type="number"
-                step="0.5"
+                step="0.001"
                 min={0}
-                max={2}
+                max={3}
                 value={normalDuty}
-                onChange={(e) => setNormalDuty(e.target.value)}
+                onChange={(e) => {
+                  setNormalDuty(e.target.value);
+                  setShiftFraction(e.target.value);
+                }}
               />
             </div>
             <div className="space-y-1.5">
@@ -272,11 +326,58 @@ export function AttendanceFormDialog({
                 type="number"
                 step="0.5"
                 min={0}
-                max={2}
+                max={3}
                 value={extraDuty}
                 onChange={(e) => setExtraDuty(e.target.value)}
               />
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="att-ot">OT Hours (÷8d)</Label>
+              <Input
+                id="att-ot"
+                type="number"
+                step="0.5"
+                min={0}
+                max={24}
+                value={otHours}
+                onChange={(e) => setOtHours(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-lg border bg-muted/20 p-3 space-y-2.5">
+            <label className="flex items-center gap-2 text-xs font-medium text-foreground">
+              <Checkbox
+                checked={isReliever}
+                onCheckedChange={(checked) => setIsReliever(checked === true)}
+              />
+              <span>Cross-site Reliever Duty (primary unit differs from work site)</span>
+            </label>
+            {isReliever && (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="att-primary-site" className="text-xs">Home / Primary Site</Label>
+                  <Input
+                    id="att-primary-site"
+                    list="att-site-suggestions"
+                    value={primarySiteName}
+                    onChange={(e) => setPrimarySiteName(e.target.value)}
+                    placeholder="e.g. ERTL"
+                    className="h-8 text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="att-adj-note" className="text-xs">Adjustment Note</Label>
+                  <Input
+                    id="att-adj-note"
+                    value={adjustmentNote}
+                    onChange={(e) => setAdjustmentNote(e.target.value)}
+                    placeholder="e.g. ADJUST ERTL"
+                    className="h-8 text-xs"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -388,7 +489,7 @@ export function AttendanceImportDialog({
         <DialogHeader>
           <DialogTitle>Import Site Attendance (CSV / Register Sheet)</DialogTitle>
           <DialogDescription>
-            Supports Daily Attendance CSV and Monthly Muster Roll CSV (`1..31` columns using codes P, P/P, H, A, L, WO).
+            Supports Daily Attendance CSV (with OT Hours) and Monthly Muster Roll CSV (`1..31` columns using codes P, P/P, NH, H, A, L, WO, or fractions like 0.5, 0.75, 0.333).
           </DialogDescription>
         </DialogHeader>
 

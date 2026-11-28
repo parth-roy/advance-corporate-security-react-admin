@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowUpRight, FileText, Mail, MapPin, Phone, Shirt } from "lucide-react";
+import { ArrowUpRight, FileCheck2, FileText, Mail, MapPin, Maximize2, Phone, Shirt } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -8,15 +8,25 @@ import { StatusBadge } from "@/components/acs/StatusBadge";
 import { useAcsStore } from "@/lib/acs-store";
 import type { Candidate, CandidateStatus } from "@/lib/acs-types";
 import { formatINR } from "@/lib/acs-utils";
+import { getMissingRequiredDocuments, REQUIRED_DOCUMENT_COUNT } from "@/lib/candidate-documents";
 
 interface CandidateDrawerProps {
   candidate: Candidate | null;
   onClose: () => void;
   onEdit: (candidate: Candidate) => void;
   onStatusChange: (candidate: Candidate, status: CandidateStatus) => void;
+  onViewFullScreen?: (candidate: Candidate) => void;
+  onDeploy?: (candidate: Candidate) => void;
 }
 
-export function CandidateDrawer({ candidate, onClose, onEdit, onStatusChange }: CandidateDrawerProps) {
+export function CandidateDrawer({
+  candidate,
+  onClose,
+  onEdit,
+  onStatusChange,
+  onViewFullScreen,
+  onDeploy,
+}: CandidateDrawerProps) {
   const { data } = useAcsStore();
 
   const employeeIssues = candidate
@@ -28,13 +38,29 @@ export function CandidateDrawer({ candidate, onClose, onEdit, onStatusChange }: 
       })
     : [];
 
+  const missingDocsCount = candidate ? getMissingRequiredDocuments(candidate.documents).length : 0;
+  const uploadedReqDocs = REQUIRED_DOCUMENT_COUNT - missingDocsCount;
+
   return (
     <Sheet open={Boolean(candidate)} onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
         {candidate && (
           <div className="space-y-5">
+            {onViewFullScreen && (
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                onClick={() => onViewFullScreen(candidate)}
+                title="View in full screen to see all info of the employee"
+                aria-label="View in full screen to see all info of the employee"
+                className="absolute top-3 right-11 size-7 rounded-sm opacity-80 hover:opacity-100"
+              >
+                <Maximize2 className="size-4" />
+              </Button>
+            )}
             <SheetHeader className="text-left">
-              <div className="flex items-center justify-between gap-2 pr-6">
+              <div className="flex items-center justify-between gap-2 pr-14">
                 <div className="space-y-1">
                   <SheetTitle>{candidate.fullName}</SheetTitle>
                   {candidate.employeeId && (
@@ -206,6 +232,27 @@ export function CandidateDrawer({ candidate, onClose, onEdit, onStatusChange }: 
               )}
             </div>
 
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background px-3.5 py-2.5 text-xs">
+              <div className="flex items-center gap-2">
+                <FileCheck2 className="size-4 text-primary" />
+                <span className="font-medium text-foreground">
+                  Documents: {uploadedReqDocs} / {REQUIRED_DOCUMENT_COUNT} Required
+                </span>
+              </div>
+              {onViewFullScreen && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => onViewFullScreen(candidate)}
+                >
+                  <Maximize2 className="size-3" />
+                  Full Screen View
+                </Button>
+              )}
+            </div>
+
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Remarks</p>
               <p className="mt-1.5 rounded-lg border bg-background p-3 text-sm text-foreground">
@@ -231,9 +278,17 @@ export function CandidateDrawer({ candidate, onClose, onEdit, onStatusChange }: 
               </div>
             </div>
 
-            <div className="flex gap-2 pt-2">
+            <div className="flex flex-wrap gap-2 pt-2">
+              {onDeploy && (
+                <Button
+                  className="flex-1"
+                  onClick={() => onDeploy(candidate)}
+                >
+                  {candidate.convertedEmployeeObjectId ? "Update Deployment" : "Deploy as Employee"}
+                </Button>
+              )}
               <Button className="flex-1" variant="outline" onClick={() => onEdit(candidate)}>Edit Details</Button>
-              <Button className="flex-1" onClick={onClose}>Done</Button>
+              <Button variant="outline" onClick={onClose}>Done</Button>
             </div>
           </div>
         )}

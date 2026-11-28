@@ -49,6 +49,11 @@ describe("EmploymentApplicationForm", () => {
         name: /I hereby declare that the above-mentioned information/i,
       }),
     );
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /Allow saving with pending required documents/i,
+      }),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Submit Employment Application" }));
 
@@ -168,6 +173,11 @@ describe("EmploymentApplicationForm", () => {
         name: /I hereby declare that the above-mentioned information/i,
       }),
     );
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /Allow saving with pending required documents/i,
+      }),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Submit Employment Application" }));
 
@@ -219,6 +229,11 @@ describe("EmploymentApplicationForm", () => {
     fireEvent.change(screen.getByLabelText("Other Identification Mark"), {
       target: { value: "Small scar above left eyebrow" },
     });
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /Allow saving with pending required documents/i,
+      }),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Submit Employment Application" }));
 
@@ -264,6 +279,11 @@ describe("EmploymentApplicationForm", () => {
     fireEvent.change(screen.getByLabelText("Other Identification Mark"), {
       target: { value: "Burn mark near ankle" },
     });
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /Allow saving with pending required documents/i,
+      }),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Submit Employment Application" }));
 

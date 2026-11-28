@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Download, Eye, HeartHandshake, Landmark, Search, ShieldCheck, Wallet } from "lucide-react";
+import { Download, Eye, FileText, HeartHandshake, Landmark, Search, ShieldCheck, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import { ACS_LOCATIONS, PAYROLL_MONTHS } from "@/lib/acs-seed";
 import { useAcsStore } from "@/lib/acs-store";
 import type { StatutoryRecord } from "@/lib/acs-types";
 import { downloadCsv, formatINR } from "@/lib/acs-utils";
+import { buildEsicChallanRowsForCsv, downloadTextFile } from "@/lib/finance-utils";
 
 export const Route = createFileRoute("/esi-pf")({
   head: () => ({
@@ -29,11 +30,20 @@ export const Route = createFileRoute("/esi-pf")({
 });
 
 function EsiPfPage() {
-  const { data } = useAcsStore();
+  const { data, fetchComplianceExport } = useAcsStore();
   const [search, setSearch] = useState("");
   const [monthFilter, setMonthFilter] = useState("All");
+  const [exportMonthKey, setExportMonthKey] = useState(() => new Date().toISOString().slice(0, 7));
   const [locationFilter, setLocationFilter] = useState("All");
   const [selected, setSelected] = useState<StatutoryRecord | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  const siteOptions = useMemo(() => {
+    const names = new Set<string>(ACS_LOCATIONS);
+    data.sites.forEach((s) => s.siteName && names.add(s.siteName));
+    data.statutory.forEach((r) => r.location && names.add(r.location));
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [data.sites, data.statutory]);
 
   const filtered = useMemo(
     () =>
@@ -78,6 +88,50 @@ function EsiPfPage() {
     toast.success("ESI & PF contribution report exported.");
   };
 
+  const handleExportEpfEcr = async () => {
+    setExporting(true);
+    try {
+      const res = await fetchComplianceExport({
+        monthKey: exportMonthKey,
+        siteName: locationFilter,
+      });
+      if (!res) return;
+      downloadTextFile(`acs-epf-ecr-${exportMonthKey}.txt`, res.ecrText || "");
+      toast.success(
+        `Exported EPF ECR (${res.totals.epfMembers} members · ₹${res.totals.epfEmployeeTotal + res.totals.epfEmployerTotal}).`,
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportEsicChallan = async () => {
+    setExporting(true);
+    try {
+      const res = await fetchComplianceExport({
+        monthKey: exportMonthKey,
+        siteName: locationFilter,
+      });
+      if (!res) return;
+      downloadCsv(
+        `acs-esic-challan-${exportMonthKey}.csv`,
+        [
+          "IP Number",
+          "IP Name",
+          "No of Days",
+          "Total Monthly Wages",
+          "Employee Contribution (0.75%)",
+          "Employer Contribution (3.25%)",
+          "Reason Code",
+        ],
+        buildEsicChallanRowsForCsv(res.rows),
+      );
+      toast.success(`Exported ESIC Monthly Challan (${res.rows.length} rows).`);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -88,7 +142,7 @@ function EsiPfPage() {
       </section>
 
       <section className="acs-card p-5">
-        <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex flex-1 flex-col gap-2.5 sm:flex-row">
             <div className="relative flex-1 sm:max-w-xs">
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -105,13 +159,30 @@ function EsiPfPage() {
               <SelectTrigger className="w-full sm:w-52"><SelectValue placeholder="Location" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="All">All Locations</SelectItem>
-                {ACS_LOCATIONS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                {siteOptions.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
               </SelectContent>
             </Select>
+            <Input
+              aria-label="Compliance return month"
+              type="month"
+              value={exportMonthKey}
+              onChange={(e) => setExportMonthKey(e.target.value)}
+              className="w-full sm:w-40"
+            />
           </div>
-          <Button variant="outline" size="sm" onClick={handleExport}>
-            <Download className="size-4" />Export Report
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" disabled={exporting} onClick={() => void handleExportEpfEcr()}>
+              <FileText className="size-4" />
+              Export EPF ECR (.txt)
+            </Button>
+            <Button variant="outline" size="sm" disabled={exporting} onClick={() => void handleExportEsicChallan()}>
+              <Download className="size-4" />
+              Export ESIC Challan
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleExport}>
+              <Download className="size-4" />Export Report
+            </Button>
+          </div>
         </div>
 
         <div className="overflow-x-auto">

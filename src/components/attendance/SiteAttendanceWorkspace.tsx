@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   CalendarDays,
@@ -6,16 +6,20 @@ import {
   ChevronRight,
   Clock,
   Download,
+  FileCheck2,
   FileSpreadsheet,
+  Lock,
   Pencil,
   Plus,
   Search,
   Upload,
   UserCheck,
+  UserPlus,
   Users,
   UserX,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -27,8 +31,10 @@ import { StatusBadge } from "@/components/acs/StatusBadge";
 import { AttendanceFormDialog, AttendanceImportDialog } from "@/components/attendance/AttendanceDialogs";
 import { MonthlyCalendar } from "@/components/attendance/MonthlyCalendar";
 import { MonthlyRegisterGrid } from "@/components/attendance/MonthlyRegisterGrid";
+import { MusterApprovalDialog } from "@/components/attendance/MusterApprovalDialog";
+import { RelieverAssignDialog } from "@/components/attendance/RelieverAssignDialog";
 import { useAcsStore } from "@/lib/acs-store";
-import type { AttendanceRecord, AttendanceStatus } from "@/lib/acs-types";
+import type { AttendanceRecord, AttendanceStatus, SiteMusterApproval } from "@/lib/acs-types";
 import {
   ATTENDANCE_STATUS_META,
   deriveDynamicSites,
@@ -36,8 +42,8 @@ import {
   findRecordForEmployeeDate,
   formatMonthLabel,
   getDefaultDutyForStatus,
+  getExtendedDutyCounts,
   getLocalTodayIso,
-  getRecordDutyCounts,
   shiftIsoDate,
   type SiteEmployeeSummary,
 } from "@/lib/attendance-utils";
@@ -65,13 +71,38 @@ export function SiteAttendanceWorkspace({
   onChangeMonth: (nextMonth: string) => void;
   onChangeTab: (nextTab: "mark" | "register" | "calendar" | "log") => void;
 }) {
-  const { data, upsertAttendance, upsertAttendanceBatch } = useAcsStore();
+  const {
+    data,
+    upsertAttendance,
+    upsertAttendanceBatch,
+    fetchMusterApproval,
+    saveMusterApproval,
+    uploadMusterScan,
+  } = useAcsStore();
+  const fetchApprovalRef = useRef(fetchMusterApproval);
+  fetchApprovalRef.current = fetchMusterApproval;
+
   const [empSearch, setEmpSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [selectedEmpKeys, setSelectedEmpKeys] = useState<string[]>([]);
   const [formOpen, setFormOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [relieverOpen, setRelieverOpen] = useState(false);
+  const [approvalOpen, setApprovalOpen] = useState(false);
+  const [musterApproval, setMusterApproval] = useState<SiteMusterApproval | null>(null);
   const [editingRecord, setEditingRecord] = useState<AttendanceRecord | null>(null);
+
+  const isLocked = musterApproval?.verificationStatus === "LOCKED_FOR_BILLING";
+
+  useEffect(() => {
+    let active = true;
+    void fetchApprovalRef.current(siteName, yearMonth).then((doc) => {
+      if (active) setMusterApproval(doc);
+    });
+    return () => {
+      active = false;
+    };
+  }, [siteName, yearMonth]);
 
   const allSites = useMemo(() => deriveDynamicSites(data), [data]);
   const siteEmployees = useMemo(() => deriveSiteEmployees(data, siteName), [data, siteName]);
@@ -110,9 +141,11 @@ export function SiteAttendanceWorkspace({
         !q ||
         emp.employeeName.toLowerCase().includes(q) ||
         emp.employeeId.toLowerCase().includes(q) ||
-        emp.designation.toLowerCase().includes(q);
+        emp.designation.toLowerCase().includes(q) ||
+        (emp.primarySiteName ?? "").toLowerCase().includes(q);
       if (!matchesQ) return false;
       if (statusFilter === "All") return true;
+      if (statusFilter === "Relievers") return Boolean(emp.isReliever);
       if (statusFilter === "Unmarked") return !rec;
       if (statusFilter === "Marked") return Boolean(rec);
       return rec?.status === statusFilter;
@@ -122,6 +155,7 @@ export function SiteAttendanceWorkspace({
   const dateSummary = useMemo(() => {
     let present = 0;
     let doubleDuty = 0;
+    let nationalHoliday = 0;
     let halfDay = 0;
     let absentOrLeave = 0;
     let unmarked = 0;
@@ -132,33 +166,55 @@ export function SiteAttendanceWorkspace({
       }
       if (rec.status === "Present") present += 1;
       else if (rec.status === "Double Duty") doubleDuty += 1;
+      else if (rec.status === "National Holiday") nationalHoliday += 1;
       else if (rec.status === "Half Day") halfDay += 1;
       else if (rec.status === "Absent" || rec.status === "Leave") absentOrLeave += 1;
     });
-    const monthDutyTotal = siteRecordsForMonth.reduce(
-      (sum, rec) => sum + getRecordDutyCounts(rec).totalDuty,
-      0,
-    );
+
+    let monthNormalDuty = 0;
+    let monthExtraDuty = 0;
+    let monthOtHours = 0;
+    let monthNhDays = 0;
+    siteRecordsForMonth.forEach((rec) => {
+      const counts = getExtendedDutyCounts(rec);
+      monthNormalDuty += counts.normalDuty;
+      monthExtraDuty += counts.extraDuty;
+      monthOtHours += counts.otHours;
+      monthNhDays += counts.nhDays;
+    });
+
+    const relieverCount = siteEmployees.filter((e) => e.isReliever).length;
     return {
       totalStaff: siteEmployees.length,
-      presentTotal: present + doubleDuty,
+      relieverCount,
+      presentTotal: present + doubleDuty + nationalHoliday,
       doubleDuty,
+      nationalHoliday,
       halfDay,
       absentOrLeave,
       unmarked,
-      monthDutyTotal: Number(monthDutyTotal.toFixed(1)),
+      monthNormalDuty: Number(monthNormalDuty.toFixed(2)),
+      monthExtraDuty: Number(monthExtraDuty.toFixed(2)),
+      monthOtHours: Number(monthOtHours.toFixed(1)),
+      monthNhDays,
+      monthDutyTotal: Number((monthNormalDuty + monthExtraDuty).toFixed(1)),
     };
-  }, [rosterWithStatus, siteEmployees.length, siteRecordsForMonth]);
+  }, [rosterWithStatus, siteEmployees, siteRecordsForMonth]);
 
   const markEmployeeStatus = (emp: SiteEmployeeSummary, dateIso: string, status: AttendanceStatus) => {
+    if (isLocked) {
+      toast.error("Muster is LOCKED_FOR_BILLING. Unlock sign-off before modifying attendance.");
+      return;
+    }
     const existing = findRecordForEmployeeDate(data.attendance, emp, dateIso);
     const defaults = getDefaultDutyForStatus(status);
-    const resolvedId =
-      existing?.id ?? undefined;
+    const resolvedId = existing?.id ?? undefined;
     const empId =
       emp.employeeId ||
       existing?.employeeId ||
       `ACS/SITE/${dateIso.slice(0, 4)}/${emp.employeeName.replace(/[^A-Z0-9]/gi, "").slice(0, 4).toUpperCase() || "001"}`;
+
+    const homeSite = emp.primarySiteName || existing?.primarySiteName || "";
 
     upsertAttendance(
       {
@@ -171,8 +227,14 @@ export function SiteAttendanceWorkspace({
         checkOut: defaults.checkOut,
         workingHours: defaults.workingHours,
         status,
+        shiftFraction: defaults.normalDuty,
         normalDuty: defaults.normalDuty,
         extraDuty: defaults.extraDuty,
+        ...(existing?.otHours !== undefined ? { otHours: existing.otHours } : {}),
+        ...(existing?.otDayEquivalent !== undefined ? { otDayEquivalent: existing.otDayEquivalent } : {}),
+        ...(emp.isReliever || existing?.isReliever ? { isReliever: true } : {}),
+        ...(homeSite ? { primarySiteName: homeSite } : {}),
+        ...(existing?.adjustmentNote ? { adjustmentNote: existing.adjustmentNote } : {}),
         remarks: existing?.remarks ?? "",
       },
       resolvedId,
@@ -180,6 +242,10 @@ export function SiteAttendanceWorkspace({
   };
 
   const applyBatchToRoster = async (targets: SiteEmployeeSummary[], status: AttendanceStatus) => {
+    if (isLocked) {
+      toast.error("Muster is LOCKED_FOR_BILLING. Unlock sign-off before modifying attendance.");
+      return;
+    }
     if (targets.length === 0) {
       toast.error("Select at least one employee first.");
       return;
@@ -198,8 +264,11 @@ export function SiteAttendanceWorkspace({
         checkOut: defaults.checkOut,
         workingHours: defaults.workingHours,
         status,
+        shiftFraction: defaults.normalDuty,
         normalDuty: defaults.normalDuty,
         extraDuty: defaults.extraDuty,
+        ...(emp.isReliever ? { isReliever: true } : {}),
+        ...(emp.primarySiteName ? { primarySiteName: emp.primarySiteName } : {}),
         remarks: "",
       })),
     );
@@ -216,18 +285,38 @@ export function SiteAttendanceWorkspace({
   const handleExportDaily = () => {
     downloadCsv(
       `acs-attendance-${siteName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${selectedDate}.csv`,
-      ["Employee ID", "Employee Name", "Designation", "Site", "Date", "Status", "Normal Duty", "Extra Duty", "Check-in", "Check-out", "Remarks"],
+      [
+        "Employee ID",
+        "Employee Name",
+        "Designation",
+        "Site",
+        "Reliever Home Site",
+        "Date",
+        "Status",
+        "Normal Duty",
+        "Extra Duty",
+        "OT Hours",
+        "Adjustment Note",
+        "Check-in",
+        "Check-out",
+        "Remarks",
+      ],
       filteredRoster.map(({ emp, rec }) => {
-        const counts = rec ? getRecordDutyCounts(rec) : { normalDuty: 0, extraDuty: 0 };
+        const counts = rec
+          ? getExtendedDutyCounts(rec)
+          : { normalDuty: 0, extraDuty: 0, otHours: 0 };
         return [
           emp.employeeId || "—",
           emp.employeeName,
           emp.designation,
           emp.site,
+          emp.isReliever ? emp.primarySiteName || "External" : "",
           selectedDate,
           rec?.status ?? "Unmarked",
           String(counts.normalDuty),
           String(counts.extraDuty),
+          String(counts.otHours),
+          rec?.adjustmentNote ?? "",
           rec?.checkIn ?? "—",
           rec?.checkOut ?? "—",
           rec?.remarks ?? "",
@@ -270,7 +359,28 @@ export function SiteAttendanceWorkspace({
             onChange={(e) => onChangeMonth(e.target.value)}
             className="h-9 w-40 text-xs"
           />
-          <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setApprovalOpen(true)}
+            className="gap-1.5"
+          >
+            <FileCheck2 className="size-4 text-primary" />
+            <span>Muster Sign-Off</span>
+            <StatusBadge status={musterApproval?.verificationStatus ?? "DRAFT"} />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={isLocked}
+            onClick={() => setRelieverOpen(true)}
+          >
+            <UserPlus className="size-4" />
+            Assign Reliever
+          </Button>
+          <Button variant="outline" size="sm" disabled={isLocked} onClick={() => setImportOpen(true)}>
             <Upload className="size-4" />
             Import CSV
           </Button>
@@ -280,6 +390,7 @@ export function SiteAttendanceWorkspace({
           </Button>
           <Button
             size="sm"
+            disabled={isLocked}
             onClick={() => {
               setEditingRecord(null);
               setFormOpen(true);
@@ -291,12 +402,43 @@ export function SiteAttendanceWorkspace({
         </div>
       </div>
 
+      {isLocked && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-success/40 bg-success-soft/30 px-4 py-2.5 text-xs">
+          <div className="flex items-center gap-2 font-medium text-foreground">
+            <Lock className="size-4 text-success" />
+            <span>
+              {formatMonthLabel(yearMonth)} muster for {siteName} is LOCKED_FOR_BILLING
+              {musterApproval?.verifiedByName ? ` (Verified by ${musterApproval.verifiedByName})` : ""}.
+            </span>
+          </div>
+          <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={() => setApprovalOpen(true)}>
+            Manage Sign-Off
+          </Button>
+        </div>
+      )}
+
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Site Workforce" value={dateSummary.totalStaff} hint={siteName} icon={Users} tone="primary" />
+        <StatCard
+          label="Site Workforce"
+          value={dateSummary.totalStaff}
+          hint={
+            dateSummary.relieverCount > 0
+              ? `${dateSummary.relieverCount} cross-site reliever(s)`
+              : siteName
+          }
+          icon={Users}
+          tone="primary"
+        />
         <StatCard
           label={`Present (${selectedDate})`}
           value={dateSummary.presentTotal}
-          hint={dateSummary.doubleDuty > 0 ? `${dateSummary.doubleDuty} Double Duty (P/P)` : `${dateSummary.unmarked} Unmarked`}
+          hint={
+            dateSummary.nationalHoliday > 0
+              ? `${dateSummary.doubleDuty} P/P · ${dateSummary.nationalHoliday} NH`
+              : dateSummary.doubleDuty > 0
+                ? `${dateSummary.doubleDuty} Double Duty (P/P)`
+                : `${dateSummary.unmarked} Unmarked`
+          }
           icon={UserCheck}
           tone="success"
         />
@@ -310,7 +452,11 @@ export function SiteAttendanceWorkspace({
         <StatCard
           label={`${formatMonthLabel(yearMonth)} Duties`}
           value={dateSummary.monthDutyTotal}
-          hint="Normal + Extra Duty total"
+          hint={
+            dateSummary.monthOtHours > 0 || dateSummary.monthNhDays > 0
+              ? `${dateSummary.monthOtHours}h OT · ${dateSummary.monthNhDays} NH`
+              : "Normal + Extra Duty total"
+          }
           icon={Clock}
           tone="info"
         />
@@ -392,10 +538,14 @@ export function SiteAttendanceWorkspace({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="All">All Staff ({rosterWithStatus.length})</SelectItem>
+                    <SelectItem value="Relievers">
+                      Relievers Only ({dateSummary.relieverCount})
+                    </SelectItem>
                     <SelectItem value="Unmarked">Unmarked Only</SelectItem>
                     <SelectItem value="Marked">Marked Only</SelectItem>
                     <SelectItem value="Present">Present (P)</SelectItem>
                     <SelectItem value="Double Duty">Double Duty (P/P)</SelectItem>
+                    <SelectItem value="National Holiday">National Holiday (NH)</SelectItem>
                     <SelectItem value="Half Day">Half Day (H)</SelectItem>
                     <SelectItem value="Absent">Absent (A)</SelectItem>
                     <SelectItem value="Leave">Leave (L)</SelectItem>
@@ -497,14 +647,32 @@ export function SiteAttendanceWorkspace({
                           />
                         </TableCell>
                         <TableCell>
-                          <div className="font-semibold text-foreground">{emp.employeeName}</div>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="font-semibold text-foreground">{emp.employeeName}</span>
+                            {emp.isReliever && (
+                              <Badge variant="info" className="px-1.5 py-0 text-[10px]">
+                                Reliever
+                              </Badge>
+                            )}
+                          </div>
                           <div className="font-mono text-[11px] text-muted-foreground">
                             {emp.employeeId || "No Employee ID"}
+                            {emp.isReliever && emp.primarySiteName ? ` · Home: ${emp.primarySiteName}` : ""}
                           </div>
                         </TableCell>
                         <TableCell className="text-muted-foreground">{emp.designation}</TableCell>
                         <TableCell>
-                          <StatusBadge status={rec?.status ?? "Unmarked"} />
+                          <div className="space-y-0.5">
+                            <StatusBadge status={rec?.status ?? "Unmarked"} />
+                            {rec && (rec.otHours ?? 0) > 0 && (
+                              <p className="text-[10px] font-medium text-info tabular-nums">
+                                +{rec.otHours}h OT
+                              </p>
+                            )}
+                            {rec?.adjustmentNote && (
+                              <p className="text-[10px] text-muted-foreground">{rec.adjustmentNote}</p>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
@@ -514,11 +682,12 @@ export function SiteAttendanceWorkspace({
                                 <button
                                   key={opt.status}
                                   type="button"
+                                  disabled={isLocked}
                                   title={opt.shortLabel}
                                   aria-label={`Mark ${emp.employeeName} ${opt.status}`}
                                   onClick={() => markEmployeeStatus(emp, selectedDate, opt.status)}
                                   className={cn(
-                                    "rounded border px-2 py-1 text-xs font-semibold transition-colors",
+                                    "rounded border px-2 py-1 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60",
                                     isActive
                                       ? "border-primary bg-primary text-primary-foreground"
                                       : "border-border bg-background text-foreground hover:bg-accent",
@@ -534,6 +703,7 @@ export function SiteAttendanceWorkspace({
                           <Button
                             size="icon"
                             variant="ghost"
+                            disabled={isLocked}
                             aria-label={`Edit details for ${emp.employeeName}`}
                             onClick={() => {
                               setEditingRecord(
@@ -550,6 +720,8 @@ export function SiteAttendanceWorkspace({
                                   status: "Present",
                                   normalDuty: 1,
                                   extraDuty: 0,
+                                  ...(emp.isReliever ? { isReliever: true } : {}),
+                                  ...(emp.primarySiteName ? { primarySiteName: emp.primarySiteName } : {}),
                                 },
                               );
                               setFormOpen(true);
@@ -572,6 +744,8 @@ export function SiteAttendanceWorkspace({
               yearMonth={yearMonth}
               employees={siteEmployees}
               records={data.attendance}
+              musterApproval={musterApproval}
+              isLocked={isLocked}
               onMarkCell={markEmployeeStatus}
             />
           </TabsContent>
@@ -598,7 +772,7 @@ export function SiteAttendanceWorkspace({
                     <TableHead>Employee</TableHead>
                     <TableHead>Rank</TableHead>
                     <TableHead>Check-in / Out</TableHead>
-                    <TableHead>Duty (N / E)</TableHead>
+                    <TableHead>Duty (N / E / OT)</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Edit</TableHead>
                   </TableRow>
@@ -612,13 +786,23 @@ export function SiteAttendanceWorkspace({
                     </TableRow>
                   ) : (
                     siteRecordsForMonth.map((rec) => {
-                      const counts = getRecordDutyCounts(rec);
+                      const counts = getExtendedDutyCounts(rec);
                       return (
                         <TableRow key={rec.id}>
                           <TableCell className="whitespace-nowrap text-muted-foreground">{rec.date}</TableCell>
                           <TableCell>
-                            <div className="font-medium text-foreground">{rec.employeeName}</div>
-                            <div className="font-mono text-[11px] text-muted-foreground">{rec.employeeId}</div>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="font-medium text-foreground">{rec.employeeName}</span>
+                              {rec.isReliever && (
+                                <Badge variant="info" className="px-1.5 py-0 text-[10px]">
+                                  Reliever
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="font-mono text-[11px] text-muted-foreground">
+                              {rec.employeeId}
+                              {rec.adjustmentNote ? ` · ${rec.adjustmentNote}` : ""}
+                            </div>
                           </TableCell>
                           <TableCell className="text-muted-foreground">{rec.designation}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs tabular-nums">
@@ -626,12 +810,14 @@ export function SiteAttendanceWorkspace({
                           </TableCell>
                           <TableCell className="tabular-nums text-xs">
                             {counts.normalDuty} + <span className="font-semibold text-info">{counts.extraDuty}</span>
+                            {counts.otHours > 0 ? ` · ${counts.otHours}h OT` : ""}
                           </TableCell>
                           <TableCell><StatusBadge status={rec.status} /></TableCell>
                           <TableCell className="text-right">
                             <Button
                               size="icon"
                               variant="ghost"
+                              disabled={isLocked}
                               aria-label={`Edit ${rec.employeeName} ${rec.date}`}
                               onClick={() => {
                                 setEditingRecord(rec);
@@ -670,6 +856,36 @@ export function SiteAttendanceWorkspace({
         defaultDate={selectedDate}
         defaultMonth={yearMonth}
         onImport={upsertAttendanceBatch}
+      />
+
+      <RelieverAssignDialog
+        open={relieverOpen}
+        onOpenChange={setRelieverOpen}
+        siteName={siteName}
+        selectedDate={selectedDate}
+        availableSites={allSites}
+        onSave={upsertAttendance}
+      />
+
+      <MusterApprovalDialog
+        open={approvalOpen}
+        onOpenChange={setApprovalOpen}
+        siteName={siteName}
+        yearMonth={yearMonth}
+        totals={{
+          normalDuty: dateSummary.monthNormalDuty,
+          extraDuty: dateSummary.monthExtraDuty,
+          otHours: dateSummary.monthOtHours,
+          nhDays: dateSummary.monthNhDays,
+          totalDuty: dateSummary.monthDutyTotal,
+        }}
+        approval={musterApproval}
+        onUploadScan={uploadMusterScan}
+        onSave={async (payload) => {
+          const saved = await saveMusterApproval(payload);
+          if (saved) setMusterApproval(saved);
+          return saved;
+        }}
       />
     </div>
   );

@@ -12,9 +12,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { DesignationCombobox } from "@/components/recruitment/DesignationCombobox";
 import { IdentificationMarkMultiSelect } from "@/components/recruitment/IdentificationMarkMultiSelect";
+import { CandidateDocumentsPanel } from "@/components/recruitment/CandidateDocumentsPanel";
 import { ACS_IDENTIFICATION_MARK_GROUPS } from "@/lib/acs-seed";
-import type { Candidate, CandidateStatus, FamilyMember } from "@/lib/acs-types";
+import { useOptionalAcsStore } from "@/lib/acs-store";
+import type { Candidate, CandidateDocuments, CandidateStatus, FamilyMember } from "@/lib/acs-types";
 import { isValidEmail } from "@/lib/acs-utils";
+import { getMissingRequiredDocuments } from "@/lib/candidate-documents";
 import { buildEmployeeId, inferDepartmentCode, parseEmployeeId } from "@/lib/employee-id";
 
 interface EmploymentApplicationFormProps {
@@ -135,6 +138,8 @@ function formatUnitMeasurement(value: string, unit: string): string {
 }
 
 export function EmploymentApplicationForm({ editing, onCancel, onSave }: EmploymentApplicationFormProps) {
+  const store = useOptionalAcsStore();
+  const knownSites = store?.data.sites ?? [];
   const [fullName, setFullName] = useState("");
   const [fatherOrHusbandName, setFatherOrHusbandName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
@@ -181,6 +186,8 @@ export function EmploymentApplicationForm({ editing, onCancel, onSave }: Employm
   const [applicantSignature, setApplicantSignature] = useState("");
   const [resumeName, setResumeName] = useState("");
   const [remarks, setRemarks] = useState("");
+  const [documents, setDocuments] = useState<CandidateDocuments>({});
+  const [allowPendingDocs, setAllowPendingDocs] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -260,6 +267,9 @@ export function EmploymentApplicationForm({ editing, onCancel, onSave }: Employm
       setApplicantSignature(editing.applicantSignature ?? editing.fullName);
       setResumeName(editing.resumeName ?? "");
       setRemarks(editing.remarks ?? "");
+      const existingDocs = editing.documents ?? {};
+      setDocuments(existingDocs);
+      setAllowPendingDocs(getMissingRequiredDocuments(existingDocs).length > 0);
     } else {
       setFullName("");
       setFatherOrHusbandName("");
@@ -307,6 +317,8 @@ export function EmploymentApplicationForm({ editing, onCancel, onSave }: Employm
       setApplicantSignature("");
       setResumeName("");
       setRemarks("");
+      setDocuments({});
+      setAllowPendingDocs(false);
     }
     setError("");
   }, [editing]);
@@ -380,6 +392,14 @@ export function EmploymentApplicationForm({ editing, onCancel, onSave }: Employm
       return;
     }
 
+    const missingDocs = getMissingRequiredDocuments(documents);
+    if (missingDocs.length > 0 && !allowPendingDocs) {
+      setError(
+        `Please upload all required documents (${missingDocs.map((d) => d.label).join(", ")}), or check "Save with pending documents (Draft)".`,
+      );
+      return;
+    }
+
     const cleanedFamily = familyMembers
       .map((m) => ({
         name: m.name.trim(),
@@ -441,6 +461,7 @@ export function EmploymentApplicationForm({ editing, onCancel, onSave }: Employm
         declarationDate: declarationDate.trim(),
         declarationPlace: declarationPlace.trim(),
         applicantSignature: (applicantSignature || fullName).trim(),
+        documents,
         resumeName: resumeName || `${fullName.trim().replace(/\s+/g, "_")}_Application.pdf`,
         remarks: remarks.trim(),
       },
@@ -452,7 +473,7 @@ export function EmploymentApplicationForm({ editing, onCancel, onSave }: Employm
   };
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5">
+    <div className="w-full space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button type="button" variant="outline" size="sm" onClick={onCancel}>
           <ArrowLeft className="size-4" />
@@ -463,7 +484,8 @@ export function EmploymentApplicationForm({ editing, onCancel, onSave }: Employm
         </span>
       </div>
 
-      <form onSubmit={handleSubmit} className="acs-card space-y-6 p-5 sm:p-8" noValidate>
+      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-12">
+        <form onSubmit={handleSubmit} className="acs-card space-y-6 p-5 sm:p-7 xl:col-span-8" noValidate>
         <div className="flex flex-col items-start justify-between gap-4 border-b border-border pb-5 sm:flex-row sm:items-center">
           <AcsLogo />
           <div className="sm:text-right">
@@ -894,11 +916,19 @@ export function EmploymentApplicationForm({ editing, onCancel, onSave }: Employm
               <Label htmlFor="emp-site">Site *</Label>
               <Input
                 id="emp-site"
+                list="acs-real-sites-list"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
                 placeholder="Enter deployment site name"
                 required
               />
+              {knownSites.length > 0 && (
+                <datalist id="acs-real-sites-list">
+                  {knownSites.map((s) => (
+                    <option key={s.id} value={s.siteName} />
+                  ))}
+                </datalist>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="emp-as">As (Deployed Role)</Label>
@@ -1138,6 +1168,18 @@ export function EmploymentApplicationForm({ editing, onCancel, onSave }: Employm
           </div>
         </section>
 
+        {getMissingRequiredDocuments(documents).length > 0 && (
+          <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-border bg-muted/30 px-3.5 py-2.5 text-xs text-muted-foreground">
+            <Checkbox
+              checked={allowPendingDocs}
+              onCheckedChange={(checked) => setAllowPendingDocs(checked === true)}
+            />
+            <span>
+              Allow saving with pending required documents (Draft / Verify Later — {getMissingRequiredDocuments(documents).length} required remaining)
+            </span>
+          </label>
+        )}
+
         {error && (
           <div role="alert" className="rounded-lg border border-danger/30 bg-danger-soft px-3.5 py-2.5 text-xs font-medium text-danger">
             {error}
@@ -1152,6 +1194,11 @@ export function EmploymentApplicationForm({ editing, onCancel, onSave }: Employm
           </Button>
         </div>
       </form>
+
+      <div className="xl:col-span-4 xl:sticky xl:top-20">
+        <CandidateDocumentsPanel documents={documents} onChange={setDocuments} />
+      </div>
+      </div>
     </div>
   );
 }

@@ -32,7 +32,15 @@ export function MonthlyCalendar({
   const dayStatsMap = useMemo(() => {
     const map = new Map<
       string,
-      { present: number; doubleDuty: number; halfDay: number; absent: number; leave: number; weeklyOff: number }
+      {
+        present: number;
+        doubleDuty: number;
+        halfDay: number;
+        nationalHoliday: number;
+        absent: number;
+        leave: number;
+        weeklyOff: number;
+      }
     >();
 
     records.forEach((rec) => {
@@ -42,6 +50,7 @@ export function MonthlyCalendar({
         present: 0,
         doubleDuty: 0,
         halfDay: 0,
+        nationalHoliday: 0,
         absent: 0,
         leave: 0,
         weeklyOff: 0,
@@ -49,6 +58,7 @@ export function MonthlyCalendar({
       if (rec.status === "Present") cur.present += 1;
       else if (rec.status === "Double Duty") cur.doubleDuty += 1;
       else if (rec.status === "Half Day") cur.halfDay += 1;
+      else if (rec.status === "National Holiday") cur.nationalHoliday += 1;
       else if (rec.status === "Absent") cur.absent += 1;
       else if (rec.status === "Leave") cur.leave += 1;
       else if (rec.status === "Weekly Off") cur.weeklyOff += 1;
@@ -73,6 +83,7 @@ export function MonthlyCalendar({
           <StatusBadge status="Present" />
           <StatusBadge status="Double Duty" />
           <StatusBadge status="Half Day" />
+          <StatusBadge status="National Holiday" />
           <StatusBadge status="Leave" />
           <StatusBadge status="Absent" />
           <StatusBadge status="Weekly Off" />
@@ -97,7 +108,13 @@ export function MonthlyCalendar({
           const isToday = dateIso === todayIso;
           const isSelected = dateIso === selectedDate;
           const totalMarked = stats
-            ? stats.present + stats.doubleDuty + stats.halfDay + stats.absent + stats.leave + stats.weeklyOff
+            ? stats.present +
+              stats.doubleDuty +
+              stats.halfDay +
+              stats.nationalHoliday +
+              stats.absent +
+              stats.leave +
+              stats.weeklyOff
             : 0;
 
           return (
@@ -128,6 +145,9 @@ export function MonthlyCalendar({
                   )}
                   {stats && stats.doubleDuty > 0 && (
                     <p className="font-semibold text-info">{stats.doubleDuty} P/P</p>
+                  )}
+                  {stats && stats.nationalHoliday > 0 && (
+                    <p className="font-semibold text-primary">{stats.nationalHoliday} NH</p>
                   )}
                   {stats && stats.halfDay > 0 && (
                     <p className="text-warning">{stats.halfDay} H</p>

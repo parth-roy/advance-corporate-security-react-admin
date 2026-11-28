@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Bell,
+  Building2,
   CalendarCheck2,
   CheckCheck,
   FileSpreadsheet,
@@ -16,6 +17,7 @@ import {
   Shirt,
   UserCircle2,
   UserPlus,
+  Users,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -70,13 +72,13 @@ type AppRoutePath =
 
 interface RouteSearchTarget {
   to: AppRoutePath;
-  search?: { tab: "profile" | "settings" };
+  search?: { tab: "profile" | "settings" | "sites" | "employees" };
 }
 
 interface NavItem {
   title: string;
   to: AppRoutePath;
-  search?: { tab: "profile" | "settings" };
+  search?: { tab: "profile" | "settings" | "sites" | "employees" };
   icon: LucideIcon;
   section: string;
   keywords: string[];
@@ -163,6 +165,22 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
 
 const ALL_SEARCH_MODULES: NavItem[] = [
   ...NAV_GROUPS.flatMap((g) => g.items),
+  {
+    title: "Employee Directory",
+    to: "/recruitment",
+    search: { tab: "employees" },
+    icon: Users,
+    section: "Operations",
+    keywords: ["employees", "employee directory", "deployed", "guard list", "staff directory"],
+  },
+  {
+    title: "Client Sites & Units",
+    to: "/settings",
+    search: { tab: "sites" },
+    icon: Building2,
+    section: "System",
+    keywords: ["sites", "site master", "units", "gstin", "clients", "contracts"],
+  },
   {
     title: "Settings",
     to: "/settings",
@@ -318,10 +336,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const searchObj = locationState.search as Record<string, unknown> | undefined;
   const searchTab = searchObj?.["tab"];
   const searchView = searchObj?.["view"];
+  const searchMode = searchObj?.["mode"];
   const searchSite = typeof searchObj?.["site"] === "string" ? searchObj["site"] : "";
   const isProfileView = pathname === "/settings" && searchTab === "profile";
+  const isSitesView = pathname === "/settings" && searchTab === "sites";
+  const isEmployeeDirectoryView = pathname === "/recruitment" && searchTab === "employees";
   const isIssueUniformView = pathname === "/uniforms" && searchView === "issue";
   const isAttendanceSiteView = pathname === "/attendance" && Boolean(searchSite.trim());
+  const isCandidateFullView = pathname === "/recruitment" && searchMode === "view";
 
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -346,14 +368,20 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const currentTitle = isProfileView
     ? "Admin Profile"
-    : isIssueUniformView
-      ? "Issue Uniforms & Accessories"
-      : isAttendanceSiteView
-        ? `${searchSite} — Attendance`
-        : (ALL_SEARCH_MODULES.find((r) => r.to === pathname)?.title ?? "Dashboard");
-  const currentSection = isProfileView
+    : isSitesView
+      ? "Client Sites & Units"
+      : isEmployeeDirectoryView
+        ? "Employee Directory"
+        : isIssueUniformView
+          ? "Issue Uniforms & Accessories"
+          : isAttendanceSiteView
+            ? `${searchSite} — Attendance`
+            : isCandidateFullView
+              ? "Employee Full Profile"
+              : (ALL_SEARCH_MODULES.find((r) => r.to === pathname)?.title ?? "Dashboard");
+  const currentSection = isProfileView || isSitesView
     ? "System"
-    : isIssueUniformView || isAttendanceSiteView
+    : isIssueUniformView || isAttendanceSiteView || isCandidateFullView || isEmployeeDirectoryView
       ? "Operations"
       : (ALL_SEARCH_MODULES.find((r) => r.to === pathname)?.section ?? "Overview");
 
@@ -382,6 +410,38 @@ export function AppShell({ children }: { children: ReactNode }) {
           label: mod.title,
           sub: `Module · ${mod.section}`,
           target: mod.search ? { to: mod.to, search: mod.search } : { to: mod.to },
+        });
+      }
+    });
+
+    data.sites.forEach((site) => {
+      if (
+        site.siteName.toLowerCase().includes(q) ||
+        site.siteCode.toLowerCase().includes(q) ||
+        site.clientName.toLowerCase().includes(q) ||
+        (site.clientGstin ?? "").toLowerCase().includes(q)
+      ) {
+        hits.push({
+          label: `${site.siteName} (${site.siteCode})`,
+          sub: `Client Site · ${site.gstMode}`,
+          target: { to: "/settings", search: { tab: "sites" } },
+        });
+      }
+    });
+
+    data.employees.forEach((emp) => {
+      if (
+        emp.fullName.toLowerCase().includes(q) ||
+        emp.empCode.toLowerCase().includes(q) ||
+        (emp.legacyEmpCode ?? "").toLowerCase().includes(q) ||
+        emp.designation.toLowerCase().includes(q) ||
+        emp.siteName.toLowerCase().includes(q) ||
+        emp.mobile.toLowerCase().includes(q)
+      ) {
+        hits.push({
+          label: `${emp.fullName} (${emp.empCode})`,
+          sub: `Employee · ${emp.designation} · ${emp.siteName}`,
+          target: { to: "/recruitment", search: { tab: "employees" } },
         });
       }
     });
@@ -478,15 +538,22 @@ export function AppShell({ children }: { children: ReactNode }) {
         return true;
       })
       .slice(0, 8);
-  }, [query, data.candidates, data.uniforms, data.attendance, data.salaries, data.payslips, data.invoices]);
+  }, [query, data.sites, data.employees, data.candidates, data.uniforms, data.attendance, data.salaries, data.payslips, data.invoices]);
 
   useEffect(() => {
     setActiveIndex(0);
   }, [query, searchResults.length]);
 
   const navigateToTarget = (target: RouteSearchTarget) => {
-    if (target.search) {
-      void navigate({ to: "/settings", search: target.search });
+    if (target.to === "/settings" && target.search) {
+      const tab =
+        target.search.tab === "profile" || target.search.tab === "sites"
+          ? target.search.tab
+          : "settings";
+      void navigate({ to: "/settings", search: { tab } });
+    } else if (target.to === "/recruitment" && target.search) {
+      const tab = target.search.tab === "employees" ? "employees" : "pipeline";
+      void navigate({ to: "/recruitment", search: { tab } });
     } else {
       void navigate({ to: target.to });
     }

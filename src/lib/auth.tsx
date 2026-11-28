@@ -33,6 +33,7 @@ interface AuthContextValue {
   updateProfile: (payload: UpdateAdminProfilePayload) => Promise<AdminAuthUser>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   apiRequest: <T = unknown>(path: string, init?: RequestInit) => Promise<T>;
+  apiRequestRaw: <T = Record<string, unknown>>(path: string, init?: RequestInit) => Promise<T>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -81,11 +82,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus("unauthenticated");
   }, []);
 
-  const apiRequest = useCallback(
-    async <T = unknown,>(path: string, init: RequestInit = {}): Promise<T> => {
+  const apiRequestRaw = useCallback(
+    async <T = Record<string, unknown>,>(path: string, init: RequestInit = {}): Promise<T> => {
       const activeToken = tokenRef.current ?? readStoredToken();
       const headers = new Headers(init.headers);
-      if (!headers.has("Content-Type") && init.body) {
+      if (!headers.has("Content-Type") && init.body && !(init.body instanceof FormData)) {
         headers.set("Content-Type", "application/json");
       }
       if (activeToken && !headers.has("Authorization")) {
@@ -101,8 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const payload = (await response.json().catch(() => ({}))) as {
         success?: boolean;
         message?: string;
-        data?: T;
-      };
+      } & Record<string, unknown>;
 
       if (response.status === 401 || response.status === 403) {
         if (path !== "/api/admin/auth/login" && path !== "/api/admin/auth/change-password") {
@@ -114,9 +114,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(payload.message || `Request failed (${response.status})`);
       }
 
-      return payload.data as T;
+      return payload as T;
     },
     [clearSession],
+  );
+
+  const apiRequest = useCallback(
+    async <T = unknown,>(path: string, init: RequestInit = {}): Promise<T> => {
+      const payload = await apiRequestRaw<{ data?: T }>(path, init);
+      return payload.data as T;
+    },
+    [apiRequestRaw],
   );
 
   useEffect(() => {
@@ -235,7 +243,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <AuthContext.Provider value={{ status, user, token, login, logout, updateProfile, changePassword, apiRequest }}>
+    <AuthContext.Provider value={{ status, user, token, login, logout, updateProfile, changePassword, apiRequest, apiRequestRaw }}>
       {children}
     </AuthContext.Provider>
   );
@@ -245,4 +253,8 @@ export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
   return ctx;
+}
+
+export function useOptionalAuth(): AuthContextValue | null {
+  return useContext(AuthContext);
 }
