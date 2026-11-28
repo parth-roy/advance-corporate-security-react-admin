@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { UserCheck, Wand2 } from "lucide-react";
 import { toast } from "sonner";
+import { SiteCombobox } from "@/components/recruitment/SiteCombobox";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -154,19 +155,13 @@ export function DeployCandidateDialog({
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="deploy-site">Deployment Site *</Label>
-              <Input
+              <SiteCombobox
                 id="deploy-site"
-                list="deploy-site-options"
                 value={siteName}
-                onChange={(e) => setSiteName(e.target.value)}
-                placeholder="Select or enter site name"
+                onChange={setSiteName}
+                placeholder="Choose or type site name"
                 required
               />
-              <datalist id="deploy-site-options">
-                {data.sites.map((s) => (
-                  <option key={s.id} value={s.siteName} />
-                ))}
-              </datalist>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="deploy-subunit">Sub-Unit / Dept (Optional)</Label>
@@ -174,7 +169,7 @@ export function DeployCandidateDialog({
                 id="deploy-subunit"
                 value={subUnit}
                 onChange={(e) => setSubUnit(e.target.value)}
-                placeholder="e.g. BO Guwahati, MVCC"
+                placeholder="e.g. Main Gate, BO Guwahati"
               />
             </div>
           </div>

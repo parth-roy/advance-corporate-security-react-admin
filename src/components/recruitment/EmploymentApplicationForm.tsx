@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { DesignationCombobox } from "@/components/recruitment/DesignationCombobox";
 import { IdentificationMarkMultiSelect } from "@/components/recruitment/IdentificationMarkMultiSelect";
 import { CandidateDocumentsPanel } from "@/components/recruitment/CandidateDocumentsPanel";
+import { SiteCombobox } from "@/components/recruitment/SiteCombobox";
 import { ACS_IDENTIFICATION_MARK_GROUPS } from "@/lib/acs-seed";
 import { useOptionalAcsStore } from "@/lib/acs-store";
 import type { Candidate, CandidateDocuments, CandidateStatus, FamilyMember } from "@/lib/acs-types";
@@ -485,7 +486,7 @@ export function EmploymentApplicationForm({ editing, onCancel, onSave }: Employm
       </div>
 
       <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-12">
-        <form onSubmit={handleSubmit} className="acs-card space-y-6 p-5 sm:p-7 xl:col-span-8" noValidate>
+        <form onSubmit={handleSubmit} className="acs-card space-y-6 p-5 sm:p-7 xl:col-span-7" noValidate>
         <div className="flex flex-col items-start justify-between gap-4 border-b border-border pb-5 sm:flex-row sm:items-center">
           <AcsLogo />
           <div className="sm:text-right">
@@ -914,21 +915,13 @@ export function EmploymentApplicationForm({ editing, onCancel, onSave }: Employm
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="emp-site">Site *</Label>
-              <Input
+              <SiteCombobox
                 id="emp-site"
-                list="acs-real-sites-list"
                 value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="Enter deployment site name"
+                onChange={setLocation}
+                placeholder="Select or enter deployment site"
                 required
               />
-              {knownSites.length > 0 && (
-                <datalist id="acs-real-sites-list">
-                  {knownSites.map((s) => (
-                    <option key={s.id} value={s.siteName} />
-                  ))}
-                </datalist>
-              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="emp-as">As (Deployed Role)</Label>
@@ -1195,7 +1188,7 @@ export function EmploymentApplicationForm({ editing, onCancel, onSave }: Employm
         </div>
       </form>
 
-      <div className="xl:col-span-4 xl:sticky xl:top-20">
+      <div className="xl:col-span-5 xl:sticky xl:top-20 xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto">
         <CandidateDocumentsPanel documents={documents} onChange={setDocuments} />
       </div>
       </div>

@@ -43,6 +43,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { StatCard } from "@/components/acs/StatCard";
+import { DesignationCombobox } from "@/components/recruitment/DesignationCombobox";
+import { SiteCombobox } from "@/components/recruitment/SiteCombobox";
 import { type PaginatedEmployeesResult, useAcsStore } from "@/lib/acs-store";
 import type {
   EmployeeRateType,
@@ -213,9 +215,6 @@ export function EmployeeDirectoryView() {
     setEditing(null);
     setForm(EMPTY_EMP_FORM);
     setDialogOpen(true);
-    void previewNextEmployeeCode("Security Guard").then((code) => {
-      setForm((prev) => (prev.empCode ? prev : { ...prev, empCode: code }));
-    });
   };
 
   const openEditDialog = (emp: EmployeeRecord) => {
@@ -325,7 +324,7 @@ export function EmployeeDirectoryView() {
         <StatCard
           label="Total Deployed Staff"
           value={result.summary.total}
-          hint="Stored in AdminEmployee"
+          hint="All active, on-hold & past staff"
           icon={Users}
           tone="primary"
         />
@@ -388,7 +387,7 @@ export function EmployeeDirectoryView() {
             )}
             <Button type="button" onClick={openCreateDialog}>
               <Plus className="size-4" />
-              Add Direct Employee
+              Add Employee
             </Button>
           </div>
         </div>
@@ -605,10 +604,12 @@ export function EmployeeDirectoryView() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ShieldCheck className="size-4 text-primary" />
-              {editing ? `Edit Employee: ${editing.fullName}` : "Add Deployed Employee"}
+              {editing ? `Edit Employee: ${editing.fullName}` : "Add New Employee"}
             </DialogTitle>
             <DialogDescription>
-              Maintained in the site-indexed Employee Directory for attendance, payroll, uniform EMIs, and advances.
+              {editing
+                ? "Update site assignment, salary rate, bank details, or statutory numbers."
+                : "Add an active guard, supervisor, or office staff member directly to a site and payroll."}
             </DialogDescription>
           </DialogHeader>
 
@@ -638,20 +639,20 @@ export function EmployeeDirectoryView() {
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="space-y-1.5">
-                <Label htmlFor="dir-code">Employee Code</Label>
+                <Label htmlFor="dir-code">Employee Code (Optional)</Label>
                 <div className="flex gap-1.5">
                   <Input
                     id="dir-code"
                     value={form.empCode}
                     onChange={(e) => setForm({ ...form, empCode: e.target.value.toUpperCase() })}
-                    placeholder="Auto if blank"
+                    placeholder="Auto-generated on save"
                     className="font-mono uppercase"
                   />
                   <Button
                     type="button"
                     size="icon"
                     variant="outline"
-                    title="Generate next sequence code"
+                    title="Preview next employee code"
                     onClick={() =>
                       void previewNextEmployeeCode(form.designation, form.dateOfJoining.slice(0, 4)).then(
                         (code) => setForm((prev) => ({ ...prev, empCode: code })),
@@ -663,12 +664,12 @@ export function EmployeeDirectoryView() {
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="dir-legacy">Legacy Code (Register #)</Label>
+                <Label htmlFor="dir-legacy">Old Register / Bio ID (Optional)</Label>
                 <Input
                   id="dir-legacy"
                   value={form.legacyEmpCode}
                   onChange={(e) => setForm({ ...form, legacyEmpCode: e.target.value.toUpperCase() })}
-                  placeholder="e.g. 3065"
+                  placeholder="Only if migrating old ID"
                 />
               </div>
               <div className="space-y-1.5">
@@ -693,19 +694,13 @@ export function EmployeeDirectoryView() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="space-y-1.5">
                 <Label htmlFor="dir-site">Primary Site *</Label>
-                <Input
+                <SiteCombobox
                   id="dir-site"
-                  list="dir-site-options"
                   value={form.siteName}
-                  onChange={(e) => setForm({ ...form, siteName: e.target.value })}
-                  placeholder="Select or enter site"
+                  onChange={(nextSite) => setForm({ ...form, siteName: nextSite })}
+                  placeholder="Select or type site"
                   required
                 />
-                <datalist id="dir-site-options">
-                  {data.sites.map((s) => (
-                    <option key={s.id} value={s.siteName} />
-                  ))}
-                </datalist>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="dir-subunit">Sub-Unit</Label>
@@ -713,15 +708,16 @@ export function EmployeeDirectoryView() {
                   id="dir-subunit"
                   value={form.subUnit}
                   onChange={(e) => setForm({ ...form, subUnit: e.target.value })}
-                  placeholder="e.g. BO Guwahati"
+                  placeholder="e.g. Main Gate, BO Guwahati"
                 />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="dir-desig">Designation / Rank</Label>
-                <Input
+                <DesignationCombobox
                   id="dir-desig"
                   value={form.designation}
-                  onChange={(e) => setForm({ ...form, designation: e.target.value })}
+                  onChange={(nextDesig) => setForm({ ...form, designation: nextDesig })}
+                  placeholder="Select or type role"
                 />
               </div>
             </div>

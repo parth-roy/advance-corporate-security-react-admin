@@ -174,283 +174,270 @@ export function CandidateDocumentsPanel({
 
       <Separator />
 
-      <div className="overflow-hidden rounded-lg border">
-        <table className="w-full border-collapse text-xs">
-          <thead>
-            <tr className="border-b bg-muted/50 text-left text-[11px] font-semibold text-muted-foreground">
-              <th className="px-3 py-2">Document</th>
-              <th className="px-2 py-2 text-center">Req</th>
-              <th className="px-2.5 py-2 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {CANDIDATE_DOCUMENT_CHECKLIST.map((meta) => {
-              const isExpanded = expandedKey === meta.key;
+      <div className="divide-y divide-border overflow-hidden rounded-lg border bg-card">
+        {CANDIDATE_DOCUMENT_CHECKLIST.map((meta) => {
+          const isExpanded = expandedKey === meta.key;
 
-              let isUploaded = false;
-              let uploadedName = "";
-              if (meta.key === "academicQualification") {
-                const count = getAcademicDocsCount(documents);
-                isUploaded = count > 0;
-                uploadedName = count > 0 ? `${count} level(s) uploaded` : "";
-              } else if (meta.key === "previousEsiPf") {
-                isUploaded = hasUploadedFile(documents.previousEsiPf);
-                uploadedName = documents.previousEsiPf?.fileName ?? "";
-              } else {
-                const file = documents[meta.key as SimpleDocumentKey];
-                isUploaded = hasUploadedFile(file);
-                uploadedName = file?.fileName ?? "";
-              }
+          let isUploaded = false;
+          let uploadedName = "";
+          if (meta.key === "academicQualification") {
+            const count = getAcademicDocsCount(documents);
+            isUploaded = count > 0;
+            uploadedName = count > 0 ? `${count} level(s) uploaded` : "";
+          } else if (meta.key === "previousEsiPf") {
+            isUploaded = hasUploadedFile(documents.previousEsiPf);
+            uploadedName = documents.previousEsiPf?.fileName ?? "";
+          } else {
+            const file = documents[meta.key as SimpleDocumentKey];
+            isUploaded = hasUploadedFile(file);
+            uploadedName = file?.fileName ?? "";
+          }
 
-              const hasPrevEsiNums =
-                meta.key === "previousEsiPf" &&
-                Boolean(
-                  documents.previousEsiPf?.esiNumber?.trim() ||
-                    documents.previousEsiPf?.pfNumber?.trim(),
-                );
+          const hasPrevEsiNums =
+            meta.key === "previousEsiPf" &&
+            Boolean(
+              documents.previousEsiPf?.esiNumber?.trim() ||
+                documents.previousEsiPf?.pfNumber?.trim(),
+            );
 
-              return (
-                <tr key={meta.key} className="align-top">
-                  <td colSpan={3} className="p-0">
-                    <div
-                      className={cn(
-                        "flex items-center justify-between gap-2 px-3 py-2.5 transition-colors hover:bg-accent/40",
-                        isExpanded && "bg-accent/30",
-                      )}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => setExpandedKey(isExpanded ? null : meta.key)}
-                        className="flex min-w-0 flex-1 items-start gap-2 text-left"
-                      >
-                        <span className="mt-0.5 text-muted-foreground">
-                          {isExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-                        </span>
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="font-semibold text-foreground">{meta.label}</span>
-                            {isUploaded && (
-                              <CheckCircle2 className="size-3.5 shrink-0 text-success" />
-                            )}
-                          </div>
-                          <p className="truncate text-[11px] text-muted-foreground">
-                            {uploadedName || meta.subtitle}
-                          </p>
-                        </div>
-                      </button>
-
-                      <div className="flex shrink-0 items-center gap-1.5">
-                        <Badge
-                          variant={meta.required ? "danger" : "neutral"}
-                          className="px-1.5 py-0 text-[10px]"
-                        >
-                          {meta.required ? "Req*" : "Opt"}
-                        </Badge>
-
-                        {meta.key !== "academicQualification" && (
-                          <>
-                            <label
-                              aria-label={`Upload ${meta.label}`}
-                              className="inline-flex h-7 cursor-pointer items-center gap-1 rounded border border-input bg-background px-2 text-[11px] font-medium hover:bg-accent"
-                            >
-                              <Upload className="size-3" />
-                              <span>{uploadingSlot === meta.key ? "..." : isUploaded ? "Re-up" : "Upload"}</span>
-                              <input
-                                type="file"
-                                accept={meta.accept}
-                                disabled={uploadingSlot === meta.key}
-                                className="hidden"
-                                onChange={(e) => {
-                                  const f = e.target.files?.[0];
-                                  if (f) void handleFileUpload(meta.key, f);
-                                  e.target.value = "";
-                                }}
-                              />
-                            </label>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              aria-label={`View ${meta.label}`}
-                              className="h-7 px-2 text-[11px]"
-                              onClick={() =>
-                                setPreviewTarget({
-                                  key: meta.key,
-                                  title: meta.label,
-                                  subtitle: meta.subtitle,
-                                  file:
-                                    (meta.key === "previousEsiPf"
-                                      ? documents.previousEsiPf
-                                      : documents[meta.key as SimpleDocumentKey]) ?? null,
-                                  accept: meta.accept,
-                                  metaRows:
-                                    meta.key === "previousEsiPf" && hasPrevEsiNums
-                                      ? [
-                                          { label: "Previous ESI No", value: documents.previousEsiPf?.esiNumber || "—" },
-                                          { label: "Previous PF / UAN No", value: documents.previousEsiPf?.pfNumber || "—" },
-                                        ]
-                                      : [],
-                                })
-                              }
-                            >
-                              <Eye className="size-3" />
-                              View
-                            </Button>
-                          </>
+          return (
+            <div key={meta.key}>
+              <div
+                className={cn(
+                  "space-y-2 px-3 py-2.5 transition-colors hover:bg-accent/40",
+                  isExpanded && "bg-accent/30",
+                )}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedKey(isExpanded ? null : meta.key)}
+                    className="flex min-w-0 flex-1 items-start gap-2 text-left"
+                  >
+                    <span className="mt-0.5 shrink-0 text-muted-foreground">
+                      {isExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-xs font-semibold text-foreground">{meta.label}</span>
+                        {isUploaded && (
+                          <CheckCircle2 className="size-3.5 shrink-0 text-success" />
                         )}
                       </div>
+                      <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                        {uploadedName || meta.subtitle}
+                      </p>
                     </div>
+                  </button>
 
-                    {isExpanded && (
-                      <div className="border-t border-border/60 bg-muted/20 px-3 py-2.5 space-y-2">
-                        {meta.key === "academicQualification" ? (
-                          <div className="space-y-1.5">
-                            <p className="text-[11px] font-medium text-muted-foreground">
-                              Select &amp; upload available qualification certificate(s):
-                            </p>
-                            {ACADEMIC_LEVELS.map((level) => {
-                              const docFile = documents.academicQualification?.[level];
-                              const levelUploaded = hasUploadedFile(docFile);
-                              const slotId = `academicQualification:${level}`;
-                              return (
-                                <div
-                                  key={level}
-                                  className="flex items-center justify-between gap-2 rounded border bg-background px-2.5 py-1.5"
-                                >
-                                  <div className="min-w-0">
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="font-semibold text-foreground">{level}</span>
-                                      {levelUploaded && <CheckCircle2 className="size-3 text-success" />}
-                                    </div>
-                                    {levelUploaded && (
-                                      <p className="truncate text-[10px] text-muted-foreground">
-                                        {docFile?.fileName}
-                                      </p>
-                                    )}
-                                  </div>
-                                  <div className="flex shrink-0 items-center gap-1">
-                                    <label
-                                      aria-label={`Upload Academic ${level}`}
-                                      className="inline-flex h-6 cursor-pointer items-center gap-1 rounded border border-input bg-card px-2 text-[11px] font-medium hover:bg-accent"
-                                    >
-                                      <Upload className="size-3" />
-                                      <span>{uploadingSlot === slotId ? "..." : "Upload"}</span>
-                                      <input
-                                        type="file"
-                                        accept={meta.accept}
-                                        disabled={uploadingSlot === slotId}
-                                        className="hidden"
-                                        onChange={(e) => {
-                                          const f = e.target.files?.[0];
-                                          if (f) void handleFileUpload("academicQualification", f, level);
-                                          e.target.value = "";
-                                        }}
-                                      />
-                                    </label>
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="ghost"
-                                      aria-label={`View Academic ${level}`}
-                                      className="h-6 px-1.5 text-[11px]"
-                                      onClick={() =>
-                                        setPreviewTarget({
-                                          key: "academicQualification",
-                                          academicLevel: level,
-                                          title: `Academic Qualification — ${level}`,
-                                          subtitle: `${level} Certificate / Marksheet`,
-                                          file: docFile ?? null,
-                                          accept: meta.accept,
-                                        })
-                                      }
-                                    >
-                                      <Eye className="size-3" />
-                                    </Button>
-                                    {levelUploaded && (
-                                      <Button
-                                        type="button"
-                                        size="icon"
-                                        variant="ghost"
-                                        aria-label={`Remove Academic ${level}`}
-                                        className="size-6 text-danger"
-                                        onClick={() => handleRemoveFile("academicQualification", level)}
-                                      >
-                                        <Trash2 className="size-3" />
-                                      </Button>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : meta.key === "previousEsiPf" ? (
-                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                            <div className="space-y-1">
-                              <Label htmlFor="doc-prev-esi" className="text-[11px]">Previous ESI Number</Label>
-                              <Input
-                                id="doc-prev-esi"
-                                value={documents.previousEsiPf?.esiNumber ?? ""}
-                                onChange={(e) =>
-                                  onChange({
-                                    ...documents,
-                                    previousEsiPf: {
-                                      ...(documents.previousEsiPf ?? {}),
-                                      esiNumber: e.target.value,
-                                    },
-                                  })
-                                }
-                                placeholder="Optional ESI No."
-                                className="h-8 text-xs"
-                              />
+                  <Badge
+                    variant={meta.required ? "danger" : "neutral"}
+                    className="shrink-0 px-1.5 py-0 text-[10px]"
+                  >
+                    {meta.required ? "Req*" : "Opt"}
+                  </Badge>
+                </div>
+
+                {meta.key !== "academicQualification" && (
+                  <div className="flex flex-wrap items-center justify-end gap-1.5 pl-5">
+                    <label
+                      aria-label={`Upload ${meta.label}`}
+                      className="inline-flex h-7 cursor-pointer items-center gap-1 rounded border border-input bg-background px-2.5 text-[11px] font-medium hover:bg-accent"
+                    >
+                      <Upload className="size-3" />
+                      <span>{uploadingSlot === meta.key ? "..." : isUploaded ? "Re-up" : "Upload"}</span>
+                      <input
+                        type="file"
+                        accept={meta.accept}
+                        disabled={uploadingSlot === meta.key}
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) void handleFileUpload(meta.key, f);
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      aria-label={`View ${meta.label}`}
+                      className="h-7 px-2 text-[11px]"
+                      onClick={() =>
+                        setPreviewTarget({
+                          key: meta.key,
+                          title: meta.label,
+                          subtitle: meta.subtitle,
+                          file:
+                            (meta.key === "previousEsiPf"
+                              ? documents.previousEsiPf
+                              : documents[meta.key as SimpleDocumentKey]) ?? null,
+                          accept: meta.accept,
+                          metaRows:
+                            meta.key === "previousEsiPf" && hasPrevEsiNums
+                              ? [
+                                  { label: "Previous ESI No", value: documents.previousEsiPf?.esiNumber || "—" },
+                                  { label: "Previous PF / UAN No", value: documents.previousEsiPf?.pfNumber || "—" },
+                                ]
+                              : [],
+                        })
+                      }
+                    >
+                      <Eye className="size-3" />
+                      View
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {isExpanded && (
+                <div className="border-t border-border/60 bg-muted/20 px-3 py-2.5 space-y-2">
+                  {meta.key === "academicQualification" ? (
+                    <div className="space-y-1.5">
+                      <p className="text-[11px] font-medium text-muted-foreground">
+                        Select &amp; upload available qualification certificate(s):
+                      </p>
+                      {ACADEMIC_LEVELS.map((level) => {
+                        const docFile = documents.academicQualification?.[level];
+                        const levelUploaded = hasUploadedFile(docFile);
+                        const slotId = `academicQualification:${level}`;
+                        return (
+                          <div
+                            key={level}
+                            className="flex flex-wrap items-center justify-between gap-2 rounded border bg-background px-2.5 py-1.5"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-semibold text-foreground">{level}</span>
+                                {levelUploaded && <CheckCircle2 className="size-3 text-success" />}
+                              </div>
+                              {levelUploaded && (
+                                <p className="truncate text-[10px] text-muted-foreground">
+                                  {docFile?.fileName}
+                                </p>
+                              )}
                             </div>
-                            <div className="space-y-1">
-                              <Label htmlFor="doc-prev-pf" className="text-[11px]">Previous PF / UAN Number</Label>
-                              <Input
-                                id="doc-prev-pf"
-                                value={documents.previousEsiPf?.pfNumber ?? ""}
-                                onChange={(e) =>
-                                  onChange({
-                                    ...documents,
-                                    previousEsiPf: {
-                                      ...(documents.previousEsiPf ?? {}),
-                                      pfNumber: e.target.value,
-                                    },
-                                  })
-                                }
-                                placeholder="Optional PF / UAN No."
-                                className="h-8 text-xs"
-                              />
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-between gap-2 text-[11px]">
-                            <span className="text-muted-foreground">
-                              {isUploaded
-                                ? `Uploaded: ${uploadedName}`
-                                : `${meta.subtitle} (Accepted: PDF / JPG / PNG)`}
-                            </span>
-                            {isUploaded && (
+                            <div className="flex shrink-0 items-center gap-1">
+                              <label
+                                aria-label={`Upload Academic ${level}`}
+                                className="inline-flex h-6 cursor-pointer items-center gap-1 rounded border border-input bg-card px-2 text-[11px] font-medium hover:bg-accent"
+                              >
+                                <Upload className="size-3" />
+                                <span>{uploadingSlot === slotId ? "..." : "Upload"}</span>
+                                <input
+                                  type="file"
+                                  accept={meta.accept}
+                                  disabled={uploadingSlot === slotId}
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0];
+                                    if (f) void handleFileUpload("academicQualification", f, level);
+                                    e.target.value = "";
+                                  }}
+                                />
+                              </label>
                               <Button
                                 type="button"
                                 size="sm"
                                 variant="ghost"
-                                className="h-6 px-2 text-[11px] text-danger"
-                                onClick={() => handleRemoveFile(meta.key)}
+                                aria-label={`View Academic ${level}`}
+                                className="h-6 px-1.5 text-[11px]"
+                                onClick={() =>
+                                  setPreviewTarget({
+                                    key: "academicQualification",
+                                    academicLevel: level,
+                                    title: `Academic Qualification — ${level}`,
+                                    subtitle: `${level} Certificate / Marksheet`,
+                                    file: docFile ?? null,
+                                    accept: meta.accept,
+                                  })
+                                }
                               >
-                                <Trash2 className="size-3" />
-                                Remove
+                                <Eye className="size-3" />
                               </Button>
-                            )}
+                              {levelUploaded && (
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="ghost"
+                                  aria-label={`Remove Academic ${level}`}
+                                  className="size-6 text-danger"
+                                  onClick={() => handleRemoveFile("academicQualification", level)}
+                                >
+                                  <Trash2 className="size-3" />
+                                </Button>
+                              )}
+                            </div>
                           </div>
-                        )}
+                        );
+                      })}
+                    </div>
+                  ) : meta.key === "previousEsiPf" ? (
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="doc-prev-esi" className="text-[11px]">Previous ESI Number</Label>
+                        <Input
+                          id="doc-prev-esi"
+                          value={documents.previousEsiPf?.esiNumber ?? ""}
+                          onChange={(e) =>
+                            onChange({
+                              ...documents,
+                              previousEsiPf: {
+                                ...(documents.previousEsiPf ?? {}),
+                                esiNumber: e.target.value,
+                              },
+                            })
+                          }
+                          placeholder="Optional ESI No."
+                          className="h-8 text-xs"
+                        />
                       </div>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                      <div className="space-y-1">
+                        <Label htmlFor="doc-prev-pf" className="text-[11px]">Previous PF / UAN Number</Label>
+                        <Input
+                          id="doc-prev-pf"
+                          value={documents.previousEsiPf?.pfNumber ?? ""}
+                          onChange={(e) =>
+                            onChange({
+                              ...documents,
+                              previousEsiPf: {
+                                ...(documents.previousEsiPf ?? {}),
+                                pfNumber: e.target.value,
+                              },
+                            })
+                          }
+                          placeholder="Optional PF / UAN No."
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                      <span className="min-w-0 truncate text-muted-foreground">
+                        {isUploaded
+                          ? `Uploaded: ${uploadedName}`
+                          : `${meta.subtitle} (Accepted: PDF / JPG / PNG)`}
+                      </span>
+                      {isUploaded && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-2 text-[11px] text-danger"
+                          onClick={() => handleRemoveFile(meta.key)}
+                        >
+                          <Trash2 className="size-3" />
+                          Remove
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       <DocumentPreviewDialog
